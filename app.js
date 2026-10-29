@@ -1,3 +1,4 @@
+import {PeerClock} from './peer-sync.js';
 const params = new URLSearchParams(location.search);
 const raw = params.get('screen') ?? params.get('n') ?? '0';
 const screen = /^[0-9]$/.test(raw) ? Number(raw) : 0;
@@ -8,7 +9,36 @@ const canvas = document.querySelector('#art'), ctx = canvas.getContext('2d');
 const syncLabel = document.querySelector('#sync');
 let offset = 0, anchor = Date.now() - performance.now(), clockQuality = 'Device clock';
 const manual = Number(params.get('offset')) || 0;
-const now = () => anchor + performance.now() + offset + manual;
+const baseNow = () => anchor + performance.now();
+const now = () => baseNow() + offset + manual;
+const room = (params.get('room') || 'halloween').trim().slice(0,64) || 'halloween';
+let peerClock, peerStatus;
+function updateStatus() {
+  syncLabel.textContent = peerStatus?.following ? peerStatus.text : `${peerStatus?.text || 'Starting P2P'} · ${clockQuality}`;
+  document.querySelector('#room-status').textContent = peerStatus?.text || 'Finding screens…';
+}
+function screenURL(n, isPreview = false) {
+  const query = new URLSearchParams({screen:String(n), room});
+  if (isPreview) query.set('preview','1');
+  return `?${query}`;
+}
+document.querySelector('#room-key').value = room;
+document.querySelector('#room-form').onsubmit = event => {
+  event.preventDefault();
+  const query = new URLSearchParams(location.search);
+  query.set('room', document.querySelector('#room-key').value.trim().slice(0,64) || 'halloween');
+  location.search = query.toString();
+};
+document.querySelector('.preview').href = screenURL(0, true);
+document.querySelector('#tools a').href = screenURL(0);
+if (window.Peer && window.RTCPeerConnection) {
+  peerClock = new PeerClock({Peer:window.Peer, room, slot:preview ? 10 : screen,
+    baseNow, logicalNow:() => baseNow()+offset,
+    onOffset:value => {offset=value;},
+    onStatus:value => {peerStatus=value; updateStatus();}});
+  peerClock.start().catch(() => {peerStatus={text:'P2P unavailable · using UTC'}; updateStatus();});
+} else {peerStatus={text:'WebRTC unavailable · using UTC'}; updateStatus();}
+addEventListener('pagehide', event => {if (!event.persisted) peerClock?.stop();});
 // The server Date header is UTC, at whole-second precision. Midpoint correction
 // bounds typical phase uncertainty to about half a second plus network latency.
 async function syncClock() {
@@ -23,16 +53,16 @@ async function syncClock() {
   }
   if (samples.length) {
     const best = samples.sort((a,b) => a.rtt-b.rtt)[0];
-    offset = best.offset;
+    if (!peerClock?.following && !(peerStatus?.count > 1)) offset = best.offset;
     clockQuality = `UTC aligned · ±${Math.ceil(500+best.rtt/2)} ms`;
   } else clockQuality = 'Device clock · network sync unavailable';
-  syncLabel.textContent = clockQuality;
+  updateStatus();
 }
 syncClock(); setInterval(syncClock, 120000);
 document.addEventListener('visibilitychange', () => {if (!document.hidden) syncClock();});
 document.querySelector('#calibrate').onclick = syncClock;
 document.querySelector('#identity').textContent = preview ? 'FULL WALL / 3 × 3' : `SCREEN ${screen} / ${Math.floor((screen-1)/3)+1}:${(screen-1)%3+1}`;
-document.querySelector('#screens').innerHTML = Array.from({length:9},(_,i)=>`<a href="?screen=${i+1}" target="_blank" rel="noopener" aria-label="Open screen ${i+1}">${i+1}</a>`).join('');
+document.querySelector('#screens').innerHTML = Array.from({length:9},(_,i)=>`<a href="${screenURL(i+1)}" target="_blank" rel="noopener" aria-label="Open screen ${i+1}">${i+1}</a>`).join('');
 document.querySelector('#fullscreen').onclick = async () => {try {await document.documentElement.requestFullscreen();} catch {syncLabel.textContent='Use your browser’s fullscreen command';}};
 let hideTimer;
 function showTools() {document.querySelector('#tools').classList.remove('hidden');clearTimeout(hideTimer);hideTimer=setTimeout(hideTools,6000);}
@@ -53,4 +83,4 @@ function portal(t){ctx.save();ctx.translate(1500,900);glow(0,0,1400,'#6923a044')
 const scenes=[eye,ghosts,pumpkin,portal];
 function render(){const t=now()/1000,phase=((t%120)+120)%120,index=Math.floor(phase/30),local=phase%30;ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,W,H);const full=welcome||preview;const col=full?0:(screen-1)%3,row=full?0:Math.floor((screen-1)/3);ctx.scale(W/(full?3000:1000),H/(full?1800:600));ctx.translate(-col*1000,-row*600);background(t);ctx.globalAlpha=Math.min(1,local/2,(30-local)/2);scenes[index](t);ctx.globalAlpha=1;if(preview){ctx.strokeStyle='#ffc89055';ctx.lineWidth=2;ctx.font='20px monospace';for(let i=0;i<9;i++){const x=i%3*1000,y=Math.floor(i/3)*600;ctx.strokeRect(x,y,1000,600);ctx.fillStyle='#ffdfb6';ctx.fillText(String(i+1),x+24,y+38);}}requestAnimationFrame(render);}render();
 // A small read-only diagnostic surface for installation checks.
-window.screenSync={screen,preview,now,get offset(){return offset},get status(){return clockQuality},sceneAt:ms=>Math.floor((((ms/1000)%120)+120)%120/30)};
+window.screenSync={screen,preview,room,now,get peers(){return peerStatus},get offset(){return offset},get status(){return clockQuality},sceneAt:ms=>Math.floor((((ms/1000)%120)+120)%120/30)};

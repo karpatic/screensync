@@ -1,4 +1,4 @@
-import {PeerClock} from './peer-sync.js';
+import {PeerClock} from './peer-sync.js?v=2';
 const params = new URLSearchParams(location.search);
 const raw = params.get('screen') ?? params.get('n') ?? '0';
 const screen = /^[0-9]$/.test(raw) ? Number(raw) : 0;

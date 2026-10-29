@@ -1,5 +1,6 @@
-import {PeerClock} from './peer-sync.js?v=3';
-import {LAYOUTS, validConfig, defaultConfig, tileRect, roomName} from './layout.js?v=3';
+import {PeerClock} from './peer-sync.js?v=4';
+import {LAYOUTS, validConfig, defaultConfig, tileRect, roomName} from './layout.js?v=4';
+import {ghostPosition} from './ghost-motion.js?v=4';
 const params = new URLSearchParams(location.search);
 function stored(storage,key,fallback) {try{return JSON.parse(storage.getItem(key)) ?? fallback;}catch{return fallback;}}
 function save(storage,key,value) {try{storage.setItem(key,JSON.stringify(value));}catch{ /* Storage may be disabled. */ }}
@@ -10,7 +11,7 @@ let screen = raw!==null && /^[0-9]$/.test(raw) ? Number(raw) : savedDevice.room=
 let preview = params.has('preview') || (raw===null && savedDevice.room===room && savedDevice.preview===true);
 let config = readConfig(room), welcome;
 const writer = crypto.randomUUID();
-function readConfig(key) {const value=stored(localStorage,`screensync-room:${key}`,null);return validConfig(value)?value:defaultConfig();}
+function readConfig(key) {const value=stored(localStorage,`screensync-room:${key}`,null);return validConfig(value)&&value.revision>0?value:defaultConfig();}
 const canvas = document.querySelector('#art'), ctx = canvas.getContext('2d');
 const syncLabel = document.querySelector('#sync'), setup = document.querySelector('#setup');
 let offset = 0, anchor = Date.now() - performance.now(), clockQuality = 'Device clock';
@@ -38,7 +39,7 @@ function refreshUI() {
   document.body.className=welcome?'welcome':'wall';
   document.querySelector('#room-title').textContent=room;
   document.querySelector('#tools a').href=`?room=${encodeURIComponent(room)}&screen=0`;
-  document.querySelector('#layout-summary').textContent=`${config.columns} across × ${config.rows} down · ${count()} wall screens`;
+  document.querySelector('#layout-summary').textContent=`${config.columns} across × ${config.rows} down · ${count()} wall screens${config.columns===1&&config.rows===5?' · The wandering ghost':''}`;
   document.querySelector('#identity').textContent=preview?`FULL WALL / ${config.columns} × ${config.rows}`:screen===0?'WELCOME / SCREEN 0':`SCREEN ${screen} / ${Math.floor((screen-1)/config.columns)+1}:${(screen-1)%config.columns+1}`;
   const nav=document.querySelector('#screens');nav.style.gridTemplateColumns=`repeat(${config.columns},42px)`;nav.replaceChildren();
   for(let n=1;n<=count();n++){const button=document.createElement('button');button.textContent=n;button.setAttribute('aria-label',`Use screen ${n}`);button.onclick=()=>setDevice(n);nav.append(button);}
@@ -146,16 +147,48 @@ function ghost(x,y,s,t){ctx.save();ctx.translate(x,y);ctx.scale(s,s);ctx.shadowC
 function ghosts(t){for(let i=0;i<13;i++){const s=.8+random(i+20)*1.9;const x=fract(random(i+9)+t*(.012+random(i)*.006))*3900-450,y=200+random(i+38)*1400+Math.sin(t*.8+i)*110;ghost(x,y,s,t+i);}}
 function pumpkin(t){ctx.save();ctx.translate(1500,960);ctx.rotate(Math.sin(t*.25)*.035);glow(0,0,1150,'#b3431744');ctx.fillStyle='#4e5129';ctx.beginPath();ctx.moveTo(-85,-490);ctx.quadraticCurveTo(-140,-790,120,-720);ctx.lineTo(100,-640);ctx.quadraticCurveTo(-30,-680,30,-490);ctx.fill();for(let i=-2;i<=2;i++)ellipse(i*205,0,390-Math.abs(i)*35,540-Math.abs(i)*25,['#a64019','#c4511d','#db6123','#bd4819','#9a3519'][i+2]);const light=ctx.createRadialGradient(0,-50,0,0,-50,800);light.addColorStop(0,'#fff4b5');light.addColorStop(1,'#ff9d2c');ctx.fillStyle=light;ctx.shadowColor='#ffb54f';ctx.shadowBlur=35+Math.sin(t*2)*10;ctx.beginPath();ctx.moveTo(-510,-80);ctx.lineTo(-170,-130);ctx.lineTo(-360,-330);ctx.closePath();ctx.moveTo(510,-80);ctx.lineTo(170,-130);ctx.lineTo(360,-330);ctx.closePath();ctx.moveTo(-70,65);ctx.lineTo(0,-65);ctx.lineTo(70,65);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(-510,130);for(let i=0;i<=12;i++)ctx.lineTo(-510+i*85,190+Math.sin(i*2.3)*50);ctx.quadraticCurveTo(0,660,-510,130);ctx.fill();ctx.restore();}
 function portal(t){ctx.save();ctx.translate(1500,900);glow(0,0,1400,'#6923a044');for(let i=24;i>=0;i--){const r=90+i*43+Math.sin(t*.9-i*.3)*20;ctx.save();ctx.rotate(t*.05+i*.15);ctx.strokeStyle=`hsla(${265+i*2},75%,${35+i},${.2+i*.02})`;ctx.lineWidth=3+i*.3;ctx.beginPath();for(let j=0;j<=180;j++){const a=j/180*TAU,rr=r+Math.sin(a*7+t*.9+i*.4)*20;const x=Math.cos(a)*rr,y=Math.sin(a)*rr*.72;j?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();ctx.restore();}ellipse(0,0,100,70,'#050409');ctx.restore();for(let i=0;i<24;i++){const x=fract(random(i+75)+t*.027)*3600-300,y=100+random(i+45)*1600+Math.sin(t+i)*90,s=20+random(i)*40;ctx.fillStyle='#050409';ctx.beginPath();ctx.moveTo(x,y+10);ctx.quadraticCurveTo(x-s,y-s*Math.sin(t*5+i),x-s*2,y);ctx.lineTo(x-s*.7,y+20);ctx.lineTo(x,y+12);ctx.lineTo(x+s*.7,y+20);ctx.lineTo(x+s*2,y);ctx.quadraticCurveTo(x+s,y-s*Math.sin(t*5+i),x,y+10);ctx.fill();}}
+// The tower uses screen-proportional coordinates so the ghost stays round,
+// rather than being stretched across the five-screen installation.
+function ghostTower(t){
+  ctx.save();ctx.scale(3,.6);
+  ctx.fillStyle='#050a12';ctx.fillRect(0,0,1000,3000);
+  for(let row=0;row<5;row++){
+    glow(500,300+row*600,620,'#102b3344');
+    ctx.strokeStyle='#8bc7c616';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(125,600*row+520);ctx.lineTo(125,600*row+240);
+    ctx.bezierCurveTo(125,600*row-20,875,600*row-20,875,600*row+240);
+    ctx.lineTo(875,600*row+520);ctx.stroke();
+  }
+  for(let i=0;i<190;i++){
+    const x=random(i+1200)*1000,y=fract(random(i+1600)-t*(.001+random(i)*.0005))*3000;
+    ellipse(x,y,1+random(i)*2,1+random(i)*2,`rgba(173,220,211,${.08+.18*Math.sin(t*.5+i)**2})`);
+  }
+  for(let i=16;i>0;i--){const past=ghostPosition(t-i*.14);glow(past.x,past.y,100+i*3,`rgba(123,218,207,${.012*(1-i/18)})`);}
+  const position=ghostPosition(t);
+  glow(position.x,position.y,360,'#80d5cf24');
+  ctx.save();ctx.translate(position.x,position.y);ctx.rotate(Math.sin(t*.7)*.055);
+  // A soft living silhouette, with a little face and fluttering scalloped hem.
+  ghost(0,0,1.6,t);ctx.restore();
+  for(let i=0;i<5;i++){
+    const a=t*.8+i*TAU/5;
+    ellipse(position.x+Math.cos(a)*190,position.y+Math.sin(a)*165,2.5,2.5,'#d8eee4aa');
+  }
+  ctx.restore();
+}
 const scenes=[eye,ghosts,pumpkin,portal];
 function render(){
   const t=now()/1000,phase=((t%120)+120)%120,index=Math.floor(phase/30),local=phase%30;
   ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,W,H);
   const full=welcome||preview,rect=full?{x:0,y:0,width:3000,height:1800}:tileRect(screen,config);
   if(rect){
-    ctx.scale(W/rect.width,H/rect.height);ctx.translate(-rect.x,-rect.y);
-    background(t);ctx.globalAlpha=Math.min(1,local/2,(30-local)/2);scenes[index](t);ctx.globalAlpha=1;
-    if(preview){ctx.strokeStyle='#ffc89055';ctx.lineWidth=2;ctx.font='20px monospace';for(let n=1;n<=count();n++){const tile=tileRect(n,config);ctx.strokeRect(tile.x,tile.y,tile.width,tile.height);ctx.fillStyle='#ffdfb6';ctx.fillText(String(n),tile.x+24,tile.y+38);}}
+    const tower=!welcome&&config.columns===1&&config.rows===5;
+    let drawW=W,drawH=H;
+    if(preview&&tower){drawW=Math.min(W,H/3);drawH=drawW*3;ctx.translate((W-drawW)/2,(H-drawH)/2);}
+    ctx.scale(drawW/rect.width,drawH/rect.height);ctx.translate(-rect.x,-rect.y);
+    if(tower)ghostTower(t);
+    else{background(t);ctx.globalAlpha=Math.min(1,local/2,(30-local)/2);scenes[index](t);ctx.globalAlpha=1;}
+    if(preview){ctx.strokeStyle='#ffc89055';ctx.lineWidth=2;ctx.font='20px monospace';for(let n=1;n<=count();n++){const tile=tileRect(n,config);ctx.strokeRect(tile.x,tile.y,tile.width,tile.height);ctx.fillStyle='#ffdfb6';if(tower){ctx.save();ctx.translate(tile.x+60,tile.y+40);ctx.scale(3,.6);ctx.font='40px monospace';ctx.fillText(String(n),0,0);ctx.restore();}else ctx.fillText(String(n),tile.x+24,tile.y+38);}}
   }
   requestAnimationFrame(render);
 }render();
-window.screenSync={get screen(){return screen},get preview(){return preview},get room(){return room},get layout(){return {...config}},now,get peers(){return peerStatus},get offset(){return offset},get status(){return clockQuality},sceneAt:ms=>Math.floor((((ms/1000)%120)+120)%120/30)};
+window.screenSync={get screen(){return screen},get preview(){return preview},get room(){return room},get layout(){return {...config}},get experience(){return config.columns===1&&config.rows===5?'wandering-ghost':'midnight-assembly'},ghostPosition,now,get peers(){return peerStatus},get offset(){return offset},get status(){return clockQuality},sceneAt:ms=>Math.floor((((ms/1000)%120)+120)%120/30)};

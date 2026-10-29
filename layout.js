@@ -11,7 +11,7 @@ export function validConfig(value) {
     && Number.isSafeInteger(value.revision) && value.revision>=0
     && typeof value.writer==='string' && value.writer.length<=80;
 }
-export const defaultConfig = () => ({columns:3, rows:3, revision:0, writer:''});
+export const defaultConfig = () => ({columns:1, rows:5, revision:0, writer:'vertical-default-v4'});
 export function compareConfig(a,b) {return a.revision-b.revision || (a.writer>b.writer?1:a.writer<b.writer?-1:0);}
 export function tileRect(screen, config) {
   const width=3000/config.columns, height=1800/config.rows;

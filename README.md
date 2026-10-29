@@ -29,9 +29,15 @@ Existing `?screen=0` through `?screen=9` links still work. `?n=1` remains an ali
 
 ### Shared room layouts
 
-Save a layout once, and active peers automatically adopt it. A late-joining screen receives the room layout from connected peers. Layout settings also persist per room in browser local storage; returning browsers can restore them after all peers leave. A room opened only on entirely new/cleared browsers starts at the default 3×3 until you save another layout. GitHub Pages does not provide a permanent room database.
+Save a layout once, and active peers automatically adopt it. A late-joining screen receives the room layout from connected peers. Layout settings also persist per room in browser local storage; returning browsers can restore them after all peers leave. A room opened only on entirely new/cleared browsers starts at the default 1 across × 5 down until you save another layout. GitHub Pages does not provide a permanent room database.
 
 Room settings use revision numbers and a deterministic writer tie-break to converge after concurrent edits or disconnected groups rejoin. They survive clock-leader departure. If a smaller layout excludes a device's old screen number, that device opens setup and asks for a valid position. Separate room keys keep separate layouts and timing groups. To switch rooms, enter its key and select **Join room**, then choose this device's number.
+
+## The wandering ghost (default)
+
+New rooms default to **1 across × 5 down**: screen 1 at the top, screen 5 at the bottom. A single glowing mint ghost travels down the full tower and back up on a smooth 36-second loop. It crosses screen boundaries as one continuous figure, with drifting dust, faint arches, and a soft light trail. The position comes directly from the shared peer clock, so late joiners see the same ghost. Preview preserves the tall wall proportions with letterboxing.
+
+The vertical formation automatically selects this dedicated experience; the other formations retain the Halloween scene cycle below. Previously saved room layouts are preserved. Older untouched defaults migrate to the vertical tower when refreshed; refresh every screen to load the new artwork.
 
 ## The haunting
 

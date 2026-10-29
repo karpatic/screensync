@@ -1,16 +1,19 @@
+import {validConfig, defaultConfig, compareConfig} from './layout.js?v=3';
 // Small timing mesh. PeerJS only brokers discovery; RTCDataChannel carries clocks.
 export class PeerClock {
-  constructor({Peer, room, slot, baseNow, logicalNow, onOffset, onStatus,
+  constructor({Peer, room, slot, baseNow, logicalNow, onOffset, onStatus, config = defaultConfig(), onConfig = () => {},
     monotonic = () => performance.now(),
     schedule = (callback, ms) => setInterval(callback, ms), cancel = handle => clearInterval(handle)}) {
     Object.assign(this, {Peer, room, slot, baseNow, logicalNow, onOffset, onStatus, monotonic, schedule, cancel});
+    this.config = validConfig(config) ? config : defaultConfig();
+    this.onConfig = onConfig;
     this.links = new Map(); this.pending = new Map(); this.samples = [];
     this.leader = slot; this.lastSync = 0; this.stopped = false; this.sequence = 0;
     this.network = 'Finding screens'; this.peer = null;
   }
   async start() {
     const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(this.room));
-    this.prefix = 'screensync-v1-' + Array.from(new Uint8Array(digest)).map(n => n.toString(16).padStart(2, '0')).join('').slice(0,32);
+    this.prefix = 'screensync-v2-' + Array.from(new Uint8Array(digest)).map(n => n.toString(16).padStart(2, '0')).join('').slice(0,32);
     if (this.stopped) return;
     this.id = `${this.prefix}-${this.slot}`;
     // A preview observes the wall without claiming any numbered screen's ID.
@@ -51,7 +54,7 @@ export class PeerClock {
     conn.on('open', () => {
       if (this.links.get(conn.peer) !== link) return;
       link.open = true; link.lastSeen = this.monotonic();
-      this.send(link, {type:'hello', version:1}); this.elect(); this.ping(link);
+      this.send(link, {type:'hello', version:2, config:this.config}); this.elect(); this.ping(link);
     });
     conn.on('data', message => this.receive(link, message));
     const remove = () => this.remove(conn.peer, link);
@@ -67,7 +70,9 @@ export class PeerClock {
   }
   elect() {
     const active = [...this.links.values()].filter(link => link.open);
-    const leader = Math.min(this.slot, ...active.map(link => link.slot));
+    const limit = this.config.columns*this.config.rows;
+    const eligible = slot => slot <= limit ? slot : 10;
+    const leader = Math.min(eligible(this.slot), ...active.map(link => eligible(link.slot)));
     if (this.leader !== leader) {this.leader = leader; this.samples = []; this.lastSync = 0;}
     this.report();
   }
@@ -78,9 +83,11 @@ export class PeerClock {
   }
   receive(link, data) {
     if (this.links.get(link.conn.peer) !== link || !link.open || !data || typeof data !== 'object') return;
-    if (!['hello','ping','pong'].includes(data.type)) return;
+    if (!['hello','ping','pong','config'].includes(data.type)) return;
     link.lastSeen = this.monotonic();
-    if (data.type === 'hello') {this.elect(); return;}
+    if (data.type === 'hello' || data.type === 'config') {
+      this.acceptConfig(data.config); this.elect(); return;
+    }
     if (!Number.isSafeInteger(data.nonce)) return;
     if (data.type === 'ping') {
       const t1 = this.logicalNow();
@@ -100,6 +107,15 @@ export class PeerClock {
     const best = this.samples.reduce((a,b) => a.rtt < b.rtt ? a : b);
     this.onOffset(best.offset); this.lastSync = this.monotonic(); this.uncertainty = best.rtt/2;
     this.report();
+  }
+  acceptConfig(config) {
+    if (!validConfig(config) || compareConfig(config,this.config)<=0) return false;
+    this.config = {...config};
+    for (const link of this.links.values()) if(link.open) this.send(link,{type:'config',config:this.config});
+    this.onConfig(this.config); this.elect(); return true;
+  }
+  setLayout(columns, rows, writer) {
+    return this.acceptConfig({columns,rows,revision:this.config.revision+1,writer});
   }
   tick() {
     if (this.stopped) return;
@@ -122,12 +138,18 @@ export class PeerClock {
   }
   get following() {return this.leader < this.slot && this.lastSync > 0 && this.monotonic()-this.lastSync < 12000;}
   report() {
-    const count = [...this.links.values()].filter(link => link.open && link.slot < 10).length + (this.slot < 10 ? 1 : 0);
+    const slots = [...this.links.values()].filter(link=>link.open).map(link=>link.slot);
+    if(this.slot<10 && this.peer?.open) slots.push(this.slot);
+    const count=slots.filter(slot=>slot<10).length;
+    const target=this.config.columns*this.config.rows;
+    const tiles=slots.filter(slot=>slot>0 && slot<=target).length;
+    const group=`${tiles}/${target} wall screens`;
     let text = this.network;
     if (count > (this.slot < 10 ? 1 : 0)) text = this.following
-      ? `P2P · ${count}/10 screens · clock ${this.leader} · RTT ±${Math.ceil(this.uncertainty)} ms`
-      : this.leader === this.slot ? `P2P · ${count}/10 screens · clock leader ${this.slot}` : `P2P · ${count}/10 screens · aligning to ${this.leader}`;
-    this.onStatus({text, count, leader:this.leader, following:this.following});
+      ? `P2P · ${group} · clock ${this.leader} · RTT ±${Math.ceil(this.uncertainty)} ms`
+      : this.leader === this.slot ? `P2P · ${group} · clock leader ${this.slot}` : `P2P · ${group} · aligning to ${this.leader}`;
+    if(count <= (this.slot<10?1:0)) text=`${this.network} · ${group}`;
+    this.onStatus({text, count, tiles, target, leader:this.leader, following:this.following});
   }
   stop() {this.stopped = true; if (this.timer) this.cancel(this.timer); this.peer?.destroy();}
 }

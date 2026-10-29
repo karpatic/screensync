@@ -1,44 +1,112 @@
-import {PeerClock} from './peer-sync.js?v=2';
+import {PeerClock} from './peer-sync.js?v=3';
+import {LAYOUTS, validConfig, defaultConfig, tileRect, roomName} from './layout.js?v=3';
 const params = new URLSearchParams(location.search);
-const raw = params.get('screen') ?? params.get('n') ?? '0';
-const screen = /^[0-9]$/.test(raw) ? Number(raw) : 0;
-const preview = params.has('preview');
-const welcome = screen === 0 && !preview;
-document.body.className = welcome ? 'welcome' : 'wall';
+function stored(storage,key,fallback) {try{return JSON.parse(storage.getItem(key)) ?? fallback;}catch{return fallback;}}
+function save(storage,key,value) {try{storage.setItem(key,JSON.stringify(value));}catch{ /* Storage may be disabled. */ }}
+const savedDevice = stored(sessionStorage,'screensync-device',{});
+let room = roomName(params.get('room') || savedDevice.room);
+const raw = params.get('screen') ?? params.get('n');
+let screen = raw!==null && /^[0-9]$/.test(raw) ? Number(raw) : savedDevice.room===room && Number.isInteger(savedDevice.screen) ? savedDevice.screen : null;
+let preview = params.has('preview') || (raw===null && savedDevice.room===room && savedDevice.preview===true);
+let config = readConfig(room), welcome;
+const writer = crypto.randomUUID();
+function readConfig(key) {const value=stored(localStorage,`screensync-room:${key}`,null);return validConfig(value)?value:defaultConfig();}
 const canvas = document.querySelector('#art'), ctx = canvas.getContext('2d');
-const syncLabel = document.querySelector('#sync');
+const syncLabel = document.querySelector('#sync'), setup = document.querySelector('#setup');
 let offset = 0, anchor = Date.now() - performance.now(), clockQuality = 'Device clock';
 const manual = Number(params.get('offset')) || 0;
 const baseNow = () => anchor + performance.now();
 const now = () => baseNow() + offset + manual;
-const room = (params.get('room') || 'halloween').trim().slice(0,64) || 'halloween';
-let peerClock, peerStatus;
+let peerClock, peerStatus, generation=0;
+const count = () => config.columns*config.rows;
 function updateStatus() {
   syncLabel.textContent = peerStatus?.following ? peerStatus.text : `${peerStatus?.text || 'Starting P2P'} · ${clockQuality}`;
   document.querySelector('#room-status').textContent = peerStatus?.text || 'Finding screens…';
 }
-function screenURL(n, isPreview = false) {
-  const query = new URLSearchParams({screen:String(n), room});
-  if (isPreview) query.set('preview','1');
-  return `?${query}`;
+function rememberDevice() {
+  save(sessionStorage,'screensync-device',{room,screen,preview});
+  const query=new URLSearchParams(location.search);
+  for(const key of ['screen','n','preview','release'])query.delete(key);
+  query.set('room',room);history.replaceState(null,'',`?${query}`);
 }
-document.querySelector('#room-key').value = room;
-document.querySelector('#room-form').onsubmit = event => {
-  event.preventDefault();
-  const query = new URLSearchParams(location.search);
-  query.set('room', document.querySelector('#room-key').value.trim().slice(0,64) || 'halloween');
-  location.search = query.toString();
+function setDevice(number, full=false) {
+  screen=number;preview=full;rememberDevice();refreshUI();connectPeers();
+}
+function refreshUI() {
+  const valid=screen===0 || tileRect(screen,config)!==null;
+  welcome=!preview && (screen===0 || !valid);
+  document.body.className=welcome?'welcome':'wall';
+  document.querySelector('#room-title').textContent=room;
+  document.querySelector('#tools a').href=`?room=${encodeURIComponent(room)}&screen=0`;
+  document.querySelector('#layout-summary').textContent=`${config.columns} across × ${config.rows} down · ${count()} wall screens`;
+  document.querySelector('#identity').textContent=preview?`FULL WALL / ${config.columns} × ${config.rows}`:screen===0?'WELCOME / SCREEN 0':`SCREEN ${screen} / ${Math.floor((screen-1)/config.columns)+1}:${(screen-1)%config.columns+1}`;
+  const nav=document.querySelector('#screens');nav.style.gridTemplateColumns=`repeat(${config.columns},42px)`;nav.replaceChildren();
+  for(let n=1;n<=count();n++){const button=document.createElement('button');button.textContent=n;button.setAttribute('aria-label',`Use screen ${n}`);button.onclick=()=>setDevice(n);nav.append(button);}
+  fillSetup();
+  if(!valid && screen!==null){document.querySelector('#setup-note').textContent=`Screen ${screen} is outside this room's new layout. Choose a new position.`;openSetup();}
+}
+function formationOptions(total, selected) {
+  const select=document.querySelector('#formation');select.replaceChildren();
+  for(const item of LAYOUTS.filter(l=>l.columns*l.rows===total)){const option=document.createElement('option');option.value=`${item.columns}x${item.rows}`;option.textContent=item.label;select.append(option);}
+  if(selected)select.value=selected;
+  drawLayoutMap();
+}
+function drawLayoutMap() {
+  const [columns,rows]=document.querySelector('#formation').value.split('x').map(Number);
+  const map=document.querySelector('#layout-map');map.style.gridTemplateColumns=`repeat(${columns},1fr)`;map.replaceChildren();
+  for(let n=1;n<=columns*rows;n++){const tile=document.createElement('span');tile.textContent=n;map.append(tile);}
+}
+function fillSetup() {
+  document.querySelector('#room-key').value=room;
+  document.querySelector('#device-count').value=String(count());
+  formationOptions(count(),`${config.columns}x${config.rows}`);
+  const select=document.querySelector('#screen-number');select.replaceChildren();
+  for(const [value,label] of [['setup','Choose a position…'],['0','0 — Welcome display'],...Array.from({length:count()},(_,i)=>[String(i+1),`${i+1} — row ${Math.floor(i/config.columns)+1}, column ${i%config.columns+1}`]),['preview','Preview the entire wall']]){
+    const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);
+  }
+  select.value=preview?'preview':screen===null||screen>count()?'setup':String(screen);
+}
+function openSetup(){if(!setup.open)setup.showModal();}
+document.querySelector('#configure').onclick=()=>{fillSetup();openSetup();};
+document.querySelector('#configure-welcome').onclick=()=>{fillSetup();openSetup();};
+document.querySelector('#preview-wall').onclick=()=>setDevice(null,true);
+document.querySelector('#tools a').onclick=event=>{event.preventDefault();setDevice(0);};
+document.querySelector('#device-count').onchange=event=>formationOptions(Number(event.target.value));
+document.querySelector('#formation').onchange=drawLayoutMap;
+document.querySelector('#join-room').onsubmit=event=>{
+  event.preventDefault();const next=roomName(document.querySelector('#room-key').value);
+  if(next!==room){room=next;config=readConfig(room);screen=null;preview=false;offset=0;rememberDevice();refreshUI();connectPeers();}
+  document.querySelector('#setup-note').textContent=`Joined ${room}. Connected devices share the room's layout. Choose this device's position below.`;
 };
-document.querySelector('.preview').href = screenURL(0, true);
-document.querySelector('#tools a').href = screenURL(0);
-if (window.Peer && window.RTCPeerConnection) {
-  peerClock = new PeerClock({Peer:window.Peer, room, slot:preview ? 10 : screen,
-    baseNow, logicalNow:() => baseNow()+offset,
-    onOffset:value => {offset=value;},
-    onStatus:value => {peerStatus=value; updateStatus();}});
-  peerClock.start().catch(() => {peerStatus={text:'P2P unavailable · using UTC'}; updateStatus();});
-} else {peerStatus={text:'WebRTC unavailable · using UTC'}; updateStatus();}
-addEventListener('pagehide', event => {if (!event.persisted) peerClock?.stop();});
+document.querySelector('#layout-form').onsubmit=event=>{
+  event.preventDefault();
+  if(roomName(document.querySelector('#room-key').value)!==room){document.querySelector('#setup-note').textContent='Join the new room before saving its layout.';return;}
+  const [columns,rows]=document.querySelector('#formation').value.split('x').map(Number);
+  const next={columns,rows,revision:config.revision+1,writer};
+  if(!validConfig(next))return;
+  if(peerClock)peerClock.acceptConfig(next);else applyConfig(next);
+  document.querySelector('#setup-note').textContent=`Saved ${columns} across × ${rows} down for ${room}. This device and connected peers now use that layout.`;
+};
+document.querySelector('#device-form').onsubmit=event=>{
+  event.preventDefault();
+  if(roomName(document.querySelector('#room-key').value)!==room){document.querySelector('#setup-note').textContent='Join the new room before choosing this device’s position.';return;}
+  const value=document.querySelector('#screen-number').value;
+  if(value==='setup'){document.querySelector('#setup-note').textContent='Choose a numbered screen, welcome display, or preview.';return;}
+  setDevice(value==='preview'?null:Number(value),value==='preview');setup.close();
+};
+function applyConfig(next) {config={...next};save(localStorage,`screensync-room:${room}`,config);refreshUI();}
+function connectPeers() {
+  const current=++generation;peerClock?.stop();peerStatus=null;
+  if(window.Peer && window.RTCPeerConnection){
+    peerClock=new PeerClock({Peer:window.Peer,room,slot:preview||screen===null?10:screen,config,
+      baseNow,logicalNow:()=>baseNow()+offset,onOffset:value=>{if(current===generation)offset=value;},
+      onConfig:value=>{if(current===generation)applyConfig(value);},
+      onStatus:value=>{if(current===generation){peerStatus=value;updateStatus();}}});
+    peerClock.start().catch(()=>{if(current===generation){peerStatus={text:'P2P unavailable · using UTC'};updateStatus();}});
+  }else{peerClock=null;peerStatus={text:'WebRTC unavailable · using UTC'};updateStatus();}
+}
+refreshUI();connectPeers();if(screen===null&&!preview)openSetup();
+addEventListener('pagehide',event=>{if(!event.persisted)peerClock?.stop();});
 // The server Date header is UTC, at whole-second precision. Midpoint correction
 // bounds typical phase uncertainty to about half a second plus network latency.
 async function syncClock() {
@@ -61,15 +129,13 @@ async function syncClock() {
 syncClock(); setInterval(syncClock, 120000);
 document.addEventListener('visibilitychange', () => {if (!document.hidden) syncClock();});
 document.querySelector('#calibrate').onclick = syncClock;
-document.querySelector('#identity').textContent = preview ? 'FULL WALL / 3 × 3' : `SCREEN ${screen} / ${Math.floor((screen-1)/3)+1}:${(screen-1)%3+1}`;
-document.querySelector('#screens').innerHTML = Array.from({length:9},(_,i)=>`<a href="${screenURL(i+1)}" target="_blank" rel="noopener" aria-label="Open screen ${i+1}">${i+1}</a>`).join('');
 document.querySelector('#fullscreen').onclick = async () => {try {await document.documentElement.requestFullscreen();} catch {syncLabel.textContent='Use your browser’s fullscreen command';}};
 let hideTimer;
 function showTools() {document.querySelector('#tools').classList.remove('hidden');clearTimeout(hideTimer);hideTimer=setTimeout(hideTools,6000);}
 function hideTools(){document.querySelector('#tools').classList.add('hidden');}
 document.querySelector('#hide').onclick=hideTools;
 document.addEventListener('pointermove',showTools);document.addEventListener('pointerdown',showTools);
-document.addEventListener('keydown',e=>{if(e.key.toLowerCase()==='h')showTools();if(e.key.toLowerCase()==='f')document.querySelector('#fullscreen').click();});showTools();
+document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea'))return;if(e.key.toLowerCase()==='h')showTools();if(e.key.toLowerCase()==='f')document.querySelector('#fullscreen').click();});showTools();
 let W,H;function resize(){const d=Math.min(devicePixelRatio||1,1.5);W=canvas.width=Math.round(innerWidth*d);H=canvas.height=Math.round(innerHeight*d);}addEventListener('resize',resize);resize();
 const TAU=Math.PI*2, fract=x=>x-Math.floor(x), random=i=>fract(Math.sin(i*127.1+311.7)*43758.5453);
 function ellipse(x,y,rx,ry,fill){ctx.fillStyle=fill;ctx.beginPath();ctx.ellipse(x,y,rx,Math.max(.001,ry),0,0,TAU);ctx.fill();}
@@ -81,6 +147,15 @@ function ghosts(t){for(let i=0;i<13;i++){const s=.8+random(i+20)*1.9;const x=fra
 function pumpkin(t){ctx.save();ctx.translate(1500,960);ctx.rotate(Math.sin(t*.25)*.035);glow(0,0,1150,'#b3431744');ctx.fillStyle='#4e5129';ctx.beginPath();ctx.moveTo(-85,-490);ctx.quadraticCurveTo(-140,-790,120,-720);ctx.lineTo(100,-640);ctx.quadraticCurveTo(-30,-680,30,-490);ctx.fill();for(let i=-2;i<=2;i++)ellipse(i*205,0,390-Math.abs(i)*35,540-Math.abs(i)*25,['#a64019','#c4511d','#db6123','#bd4819','#9a3519'][i+2]);const light=ctx.createRadialGradient(0,-50,0,0,-50,800);light.addColorStop(0,'#fff4b5');light.addColorStop(1,'#ff9d2c');ctx.fillStyle=light;ctx.shadowColor='#ffb54f';ctx.shadowBlur=35+Math.sin(t*2)*10;ctx.beginPath();ctx.moveTo(-510,-80);ctx.lineTo(-170,-130);ctx.lineTo(-360,-330);ctx.closePath();ctx.moveTo(510,-80);ctx.lineTo(170,-130);ctx.lineTo(360,-330);ctx.closePath();ctx.moveTo(-70,65);ctx.lineTo(0,-65);ctx.lineTo(70,65);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(-510,130);for(let i=0;i<=12;i++)ctx.lineTo(-510+i*85,190+Math.sin(i*2.3)*50);ctx.quadraticCurveTo(0,660,-510,130);ctx.fill();ctx.restore();}
 function portal(t){ctx.save();ctx.translate(1500,900);glow(0,0,1400,'#6923a044');for(let i=24;i>=0;i--){const r=90+i*43+Math.sin(t*.9-i*.3)*20;ctx.save();ctx.rotate(t*.05+i*.15);ctx.strokeStyle=`hsla(${265+i*2},75%,${35+i},${.2+i*.02})`;ctx.lineWidth=3+i*.3;ctx.beginPath();for(let j=0;j<=180;j++){const a=j/180*TAU,rr=r+Math.sin(a*7+t*.9+i*.4)*20;const x=Math.cos(a)*rr,y=Math.sin(a)*rr*.72;j?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();ctx.restore();}ellipse(0,0,100,70,'#050409');ctx.restore();for(let i=0;i<24;i++){const x=fract(random(i+75)+t*.027)*3600-300,y=100+random(i+45)*1600+Math.sin(t+i)*90,s=20+random(i)*40;ctx.fillStyle='#050409';ctx.beginPath();ctx.moveTo(x,y+10);ctx.quadraticCurveTo(x-s,y-s*Math.sin(t*5+i),x-s*2,y);ctx.lineTo(x-s*.7,y+20);ctx.lineTo(x,y+12);ctx.lineTo(x+s*.7,y+20);ctx.lineTo(x+s*2,y);ctx.quadraticCurveTo(x+s,y-s*Math.sin(t*5+i),x,y+10);ctx.fill();}}
 const scenes=[eye,ghosts,pumpkin,portal];
-function render(){const t=now()/1000,phase=((t%120)+120)%120,index=Math.floor(phase/30),local=phase%30;ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,W,H);const full=welcome||preview;const col=full?0:(screen-1)%3,row=full?0:Math.floor((screen-1)/3);ctx.scale(W/(full?3000:1000),H/(full?1800:600));ctx.translate(-col*1000,-row*600);background(t);ctx.globalAlpha=Math.min(1,local/2,(30-local)/2);scenes[index](t);ctx.globalAlpha=1;if(preview){ctx.strokeStyle='#ffc89055';ctx.lineWidth=2;ctx.font='20px monospace';for(let i=0;i<9;i++){const x=i%3*1000,y=Math.floor(i/3)*600;ctx.strokeRect(x,y,1000,600);ctx.fillStyle='#ffdfb6';ctx.fillText(String(i+1),x+24,y+38);}}requestAnimationFrame(render);}render();
-// A small read-only diagnostic surface for installation checks.
-window.screenSync={screen,preview,room,now,get peers(){return peerStatus},get offset(){return offset},get status(){return clockQuality},sceneAt:ms=>Math.floor((((ms/1000)%120)+120)%120/30)};
+function render(){
+  const t=now()/1000,phase=((t%120)+120)%120,index=Math.floor(phase/30),local=phase%30;
+  ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,W,H);
+  const full=welcome||preview,rect=full?{x:0,y:0,width:3000,height:1800}:tileRect(screen,config);
+  if(rect){
+    ctx.scale(W/rect.width,H/rect.height);ctx.translate(-rect.x,-rect.y);
+    background(t);ctx.globalAlpha=Math.min(1,local/2,(30-local)/2);scenes[index](t);ctx.globalAlpha=1;
+    if(preview){ctx.strokeStyle='#ffc89055';ctx.lineWidth=2;ctx.font='20px monospace';for(let n=1;n<=count();n++){const tile=tileRect(n,config);ctx.strokeRect(tile.x,tile.y,tile.width,tile.height);ctx.fillStyle='#ffdfb6';ctx.fillText(String(n),tile.x+24,tile.y+38);}}
+  }
+  requestAnimationFrame(render);
+}render();
+window.screenSync={get screen(){return screen},get preview(){return preview},get room(){return room},get layout(){return {...config}},now,get peers(){return peerStatus},get offset(){return offset},get status(){return clockQuality},sceneAt:ms=>Math.floor((((ms/1000)%120)+120)%120/30)};

@@ -69,3 +69,25 @@ test('unmatched replies cannot change time; malformed IDs are rejected',async()=
     assert.ok(Math.abs(a.now()-before)<25);
   }finally{a.clock.stop();}
 });
+
+test('room layout propagates, reaches late observers, and survives leader departure',async()=>{
+  const Peer=transport(),a=client(Peer,0,0),b=client(Peer,4,2000),observer=client(Peer,10,-2000);
+  const all=[a,b];await Promise.all(all.map(c=>c.clock.start()));
+  try{
+    await settle(all);
+    a.clock.setLayout(3,2,'host');await settle(all);
+    assert.equal(b.clock.config.columns,3);assert.equal(b.clock.config.rows,2);
+    assert.equal(b.status.target,6);assert.equal(b.status.tiles,1);
+    all.push(observer);await observer.clock.start();await settle(all);
+    assert.deepEqual(observer.clock.config,b.clock.config);
+    b.clock.setLayout(2,2,'second-device');await settle(all);
+    assert.deepEqual(a.clock.config,b.clock.config);assert.deepEqual(observer.clock.config,b.clock.config);
+    assert.equal(a.status.target,4);assert.equal(a.status.tiles,1);
+    // Invalid settings and older settings cannot roll back a live room.
+    assert.equal(a.clock.acceptConfig({columns:5,rows:5,revision:999,writer:'bad'}),false);
+    assert.equal(a.clock.acceptConfig({columns:3,rows:3,revision:0,writer:''}),false);
+    a.clock.stop();for(const [id,link]of a.clock.links)a.clock.remove(id,link);
+    await settle([b,observer]);assert.equal(observer.status.leader,4);
+    assert.equal(observer.clock.config.columns,2);assert.equal(observer.clock.config.rows,2);
+  }finally{all.forEach(c=>c.clock.stop());}
+});

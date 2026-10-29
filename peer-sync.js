@@ -1,7 +1,8 @@
 // Small timing mesh. PeerJS only brokers discovery; RTCDataChannel carries clocks.
 export class PeerClock {
   constructor({Peer, room, slot, baseNow, logicalNow, onOffset, onStatus,
-    monotonic = () => performance.now(), schedule = setInterval, cancel = clearInterval}) {
+    monotonic = () => performance.now(),
+    schedule = (callback, ms) => setInterval(callback, ms), cancel = handle => clearInterval(handle)}) {
     Object.assign(this, {Peer, room, slot, baseNow, logicalNow, onOffset, onStatus, monotonic, schedule, cancel});
     this.links = new Map(); this.pending = new Map(); this.samples = [];
     this.leader = slot; this.lastSync = 0; this.stopped = false; this.sequence = 0;

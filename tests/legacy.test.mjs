@@ -36,3 +36,23 @@ test('clock synchronization works through XHR without fetch or AbortSignal',asyn
     await assert.rejects(serverDate('/?clock=456'),/Clock request failed/);
   }finally{globalThis.XMLHttpRequest=previous;}
 });
+
+test('dedicated Safari page is self-contained, versioned, and uses only ES5 scripts',()=>{
+  const page=fs.readFileSync('safari9.html','utf8');
+  const home=fs.readFileSync('index.html','utf8');
+  const release=JSON.parse(fs.readFileSync('version.json','utf8'));
+  const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+  assert.equal(release.version,pkg.version);
+  assert.match(release.build,/^[a-f0-9]{10}$/);
+  assert.ok(page.includes('window.screenSyncForceLegacy=true'));
+  assert.ok(page.includes('Safari 9 page loaded'));
+  assert.doesNotMatch(page,/<script\s+[^>]*src=/i);
+  assert.doesNotMatch(page,/<link\s+[^>]*rel="stylesheet"/i);
+  for(const html of [home,page]){
+    assert.ok(html.includes(`>v${release.version}</small>`));
+    assert.ok(html.includes(release.build));
+  }
+  const scripts=[...page.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)];
+  assert.ok(scripts.length>=3);
+  for(const script of scripts)assert.doesNotThrow(()=>parse(script[1],{ecmaVersion:5}));
+});

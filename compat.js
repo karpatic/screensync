@@ -3,7 +3,7 @@
   'use strict';
   var modern = false;
   try { modern = 'noModule' in d.createElement('script') && new Function('return ({a:1})?.a === 1')(); } catch (ignored) {}
-  var legacy = !modern || typeof d.getElementById('setup').showModal !== 'function' || /(?:\?|&)legacy=1(?:&|$)/.test(w.location.search);
+  var legacy = !!w.screenSyncForceLegacy || !modern || typeof d.getElementById('setup').showModal !== 'function' || /(?:\?|&)legacy=1(?:&|$)/.test(w.location.search);
   w.screenSyncLegacy = legacy;
   if (legacy) d.documentElement.className += ' legacy';
   if (!Element.prototype.matches) Element.prototype.matches = Element.prototype.webkitMatchesSelector;

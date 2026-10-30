@@ -57,7 +57,7 @@ Keep automatic system time enabled on all devices. If needed, `&offset=250` adva
 
 ## Development and deployment
 
-Serve this directory with any static server (for example `python3 -m http.server 8765`). GitHub Pages publishes the root of `main`. Source: HTML, CSS, and Canvas 2D JavaScript. Run `npm ci` and `npm run build:legacy` after changing application modules so the checked-in Safari bundle stays current. The `window.screenSync` diagnostic exposes the current screen, room, shared layout, corrected timestamp, peer status, and deterministic scene selection for checks.
+Serve this directory with any static server (for example `python3 -m http.server 8765`). GitHub Pages publishes the root of `main`. Source: HTML, CSS, and Canvas 2D JavaScript. Run `npm ci` and `npm run build` after changing application modules so the checked-in Safari bundle stays current. The `window.screenSync` diagnostic exposes the current screen, room, shared layout, corrected timestamp, peer status, and deterministic scene selection for checks.
 
 Run `npm ci` once, then `npm test` for tile coverage in all formations, shared layout propagation, late joins, clock skew correction, room isolation, reconnect, leader failover, and malformed-message checks.
 
@@ -72,3 +72,9 @@ Safari 9 has no WebRTC, so it cannot join the direct peer clock or receive live 
 Use `?legacy=1` to force the fallback for QA on a current browser. Tests parse every legacy entry script as ES5 and cover loader selection and XHR timing. Browser QA removes modern APIs to exercise the shims, but that does not replace testing on a physical Safari 9/iOS 9 device. GitHub Pages HTTPS and certificate trust must also work on the actual tablet.
 
 Compatibility reference: Safari first added WebRTC in Safari 11: https://webkit.org/blog/8672/on-the-road-to-webrtc-1-0-including-vp8/
+
+## Dedicated Safari 9 page and release version
+
+Open **https://karpatic.github.io/screensync/safari9.html** for the tablet version. It always selects compatibility mode and embeds its CSS, DOM shims, and ES5 application in one HTML file. It does not load the homepage's script or stylesheet URLs, so stale copies of those assets cannot affect this page. Server-clock requests still use the network.
+
+The homepage and Safari page show a tiny version label at bottom right. `version.json` records that version and a source build fingerprint. To make a release, bump `package.json`'s version (for example `npm version patch --no-git-tag-version`), run `npm run build`, then `npm test`. Commit the generated HTML, bundle, and manifest. The build refreshes module/cache keys, stamps the homepage, and regenerates the self-contained Safari page. Use `safari9.html?v=VERSION-BUILD` when sharing a fresh release; a new URL avoids a cached HTML response as well. Static GitHub Pages can still cache each individual URL.

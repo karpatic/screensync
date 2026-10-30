@@ -21,3 +21,5 @@ h1{font-size:80px;font-size:clamp(58px,9vw,132px)}
 .legacy #setup{left:50%;-webkit-transform:translateX(-50%);transform:translateX(-50%)}
 
 .legacy .room-summary #room-status{margin-left:auto;margin-right:auto}
+
+#version-badge{position:fixed;right:20px;bottom:8px;z-index:1000;font:8px Arial,Helvetica,sans-serif;letter-spacing:.02em;color:#aa998b;opacity:.65;pointer-events:none;line-height:1.2}

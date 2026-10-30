@@ -1,7 +1,7 @@
-import {PeerClock} from './peer-sync.js?v=5';
-import {LAYOUTS, validConfig, defaultConfig, tileRect, roomName} from './layout.js?v=5';
-import {ghostPosition} from './ghost-motion.js?v=5';
-import {serverDate} from './clock-http.js?v=5';
+import {PeerClock} from './peer-sync.js?v=1.0.0';
+import {LAYOUTS, validConfig, defaultConfig, tileRect, roomName} from './layout.js?v=1.0.0';
+import {ghostPosition} from './ghost-motion.js?v=1.0.0';
+import {serverDate} from './clock-http.js?v=1.0.0';
 const params = new URLSearchParams(location.search);
 function stored(storage,key,fallback) {try{return JSON.parse(storage.getItem(key)) ?? fallback;}catch{return fallback;}}
 function save(storage,key,value) {try{storage.setItem(key,JSON.stringify(value));}catch{ /* Storage may be disabled. */ }}

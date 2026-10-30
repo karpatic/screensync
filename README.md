@@ -7,8 +7,8 @@ A silent, generative Halloween installation for ten displays. Static hosting; no
 Open https://karpatic.github.io/screensync/ on each device. The setup dialog lets you:
 
 1. Join a named room (default: **halloween**).
-2. Choose the wall screen count and arrangement, then **Save layout for this room**.
-3. Choose this device's numbered position, **0 — Welcome display**, or **Preview the entire wall**, then **Use selected screen**.
+2. Choose the wall screen count and arrangement; changes save immediately.
+3. Tap this screen’s numbered box in the layout diagram to start. The separate **Welcome screen 0** and **Preview whole wall** buttons are also available.
 
 Layouts are labeled explicitly as columns across and rows down:
 
@@ -29,7 +29,7 @@ Existing `?screen=0` through `?screen=9` links still work. `?n=1` remains an ali
 
 ### Shared room layouts
 
-Save a layout once, and active peers automatically adopt it. A late-joining screen receives the room layout from connected peers. Layout settings also persist per room in browser local storage; returning browsers can restore them after all peers leave. A room opened only on entirely new/cleared browsers starts at the default 1 across × 5 down until you save another layout. GitHub Pages does not provide a permanent room database.
+Select a layout, and active peers automatically adopt it. A late-joining screen receives the room layout from connected peers. Layout settings also persist per room in browser local storage; returning browsers can restore them after all peers leave. A room opened only on entirely new/cleared browsers starts at the default 1 across × 5 down until you select another layout. GitHub Pages does not provide a permanent room database.
 
 Room settings use revision numbers and a deterministic writer tie-break to converge after concurrent edits or disconnected groups rejoin. They survive clock-leader departure. If a smaller layout excludes a device's old screen number, that device opens setup and asks for a valid position. Separate room keys keep separate layouts and timing groups. To switch rooms, enter its key and select **Join room**, then choose this device's number.
 
@@ -83,4 +83,4 @@ The homepage and Safari page show a tiny version label at bottom right. `version
 
 Five- and six-screen lines now cycle through six original cartoons: the wandering ghost, a witch on her broom, a flock of bats, a dancing skeleton, a balloon-lifted pumpkin, and a black cat on a crescent moon. Each character travels the whole installation and back before gently fading into the next. Five-screen scenes last 36 seconds and six-screen scenes last 43.2 seconds, keeping the travel speed similar. Position and character selection use the shared absolute clock; no interaction or video playback is required. Both vertical stacks and horizontal lines preserve character proportions. Other grid formations retain the original wall scenes.
 
-For six tablets stacked top to bottom, choose **6 screens → 1 across × 6 down**, save the layout, then assign screens 1–6. On Safari 9, select that arrangement on each tablet. The default remains the five-screen stack so existing installations keep working.
+For six tablets stacked top to bottom, choose **6 screens → 1 across × 6 down**, then tap the correct numbered box (1–6) on each tablet. On Safari 9, select that arrangement on each tablet. The default remains the five-screen stack so existing installations keep working.

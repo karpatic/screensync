@@ -1,8 +1,8 @@
-import {drawCharacter} from './characters.js?v=1.1.0';
-import {PeerClock} from './peer-sync.js?v=1.1.0';
-import {LAYOUTS, validConfig, defaultConfig, tileRect, roomName, isCharacterLine} from './layout.js?v=1.1.0';
-import {ghostPosition, processionState} from './ghost-motion.js?v=1.1.0';
-import {serverDate} from './clock-http.js?v=1.1.0';
+import {drawCharacter} from './characters.js?v=1.2.0';
+import {PeerClock} from './peer-sync.js?v=1.2.0';
+import {LAYOUTS, validConfig, defaultConfig, tileRect, roomName, isCharacterLine} from './layout.js?v=1.2.0';
+import {ghostPosition, processionState} from './ghost-motion.js?v=1.2.0';
+import {serverDate} from './clock-http.js?v=1.2.0';
 const params = new URLSearchParams(location.search);
 function stored(storage,key,fallback) {try{return JSON.parse(storage.getItem(key)) ?? fallback;}catch{return fallback;}}
 function save(storage,key,value) {try{storage.setItem(key,JSON.stringify(value));}catch{ /* Storage may be disabled. */ }}
@@ -48,7 +48,7 @@ function refreshUI() {
   const nav=document.querySelector('#screens');nav.style.gridTemplateColumns=`repeat(${config.columns},42px)`;if(window.screenSyncLegacy)nav.style.width=`${config.columns*48}px`;nav.replaceChildren();
   for(let n=1;n<=count();n++){const button=document.createElement('button');button.textContent=n;button.setAttribute('aria-label',`Use screen ${n}`);button.onclick=()=>setDevice(n);nav.append(button);}
   fillSetup();
-  if(!valid && screen!==null){document.querySelector('#setup-note').textContent=`Screen ${screen} is outside this room's new layout. Choose a new position.`;openSetup();}
+  if(!valid && screen!==null){document.querySelector('#setup-note').textContent=`Screen ${screen} is outside this room's new layout. Tap a new numbered box.`;openSetup();}
 }
 function formationOptions(total, selected) {
   const select=document.querySelector('#formation');select.replaceChildren();
@@ -59,46 +59,46 @@ function formationOptions(total, selected) {
 function drawLayoutMap() {
   const [columns,rows]=document.querySelector('#formation').value.split('x').map(Number);
   const map=document.querySelector('#layout-map');map.style.gridTemplateColumns=`repeat(${columns},1fr)`;map.setAttribute('data-columns',columns);map.replaceChildren();
-  for(let n=1;n<=columns*rows;n++){const tile=document.createElement('span');tile.textContent=n;map.append(tile);}
+  for(let n=1;n<=columns*rows;n++){const tile=document.createElement('button');tile.type='button';tile.textContent=n;tile.setAttribute('aria-label',`Use screen ${n}`);tile.setAttribute('aria-pressed',String(!preview&&screen===n));tile.onclick=()=>choosePosition(n);map.append(tile);}
 }
 function fillSetup() {
   document.querySelector('#room-key').value=room;
   document.querySelector('#device-count').value=String(count());
   formationOptions(count(),`${config.columns}x${config.rows}`);
-  const select=document.querySelector('#screen-number');select.replaceChildren();
-  for(const [value,label] of [['setup','Choose a position…'],['0','0 — Welcome display'],...Array.from({length:count()},(_,i)=>[String(i+1),`${i+1} — row ${Math.floor(i/config.columns)+1}, column ${i%config.columns+1}`]),['preview','Preview the entire wall']]){
-    const option=document.createElement('option');option.value=value;option.textContent=label;select.append(option);
-  }
-  select.value=preview?'preview':screen===null||screen>count()?'setup':String(screen);
+  document.querySelector('#use-welcome').setAttribute('aria-pressed',String(!preview&&screen===0));
+  document.querySelector('#use-preview').setAttribute('aria-pressed',String(preview));
 }
 function openSetup(){if(!setup.open)setup.showModal();}
 document.querySelector('#configure').onclick=()=>{fillSetup();openSetup();};
 document.querySelector('#configure-welcome').onclick=()=>{fillSetup();openSetup();};
 document.querySelector('#preview-wall').onclick=()=>setDevice(null,true);
 document.querySelector('#tools a').onclick=event=>{event.preventDefault();setDevice(0);};
-document.querySelector('#device-count').onchange=event=>formationOptions(Number(event.target.value));
-document.querySelector('#formation').onchange=drawLayoutMap;
+document.querySelector('#device-count').onchange=event=>{
+  const total=Number(event.target.value),options=LAYOUTS.filter(item=>item.columns*item.rows===total);
+  const preferred=options.find(item=>config.columns===1?item.columns===1:config.rows===1?item.rows===1:item.columns===config.columns);
+  formationOptions(total,preferred?`${preferred.columns}x${preferred.rows}`:null);saveLayout();
+};
+document.querySelector('#formation').onchange=saveLayout;
 document.querySelector('#join-room').onsubmit=event=>{
   event.preventDefault();const next=roomName(document.querySelector('#room-key').value);
   if(next!==room){room=next;config=readConfig(room);screen=null;preview=false;offset=0;rememberDevice();refreshUI();connectPeers();}
-  document.querySelector('#setup-note').textContent=peerClock?`Joined ${room}. Connected devices share the room's layout. Choose this device's position below.`:`Joined ${room}. Choose the same arrangement on each tablet, then pick this device's number.`;
+  document.querySelector('#setup-note').textContent=peerClock?`Joined ${room}. Connected devices share the room's layout. Tap this screen’s numbered box below.`:`Joined ${room}. Choose the same arrangement on each tablet, then tap this screen’s numbered box.`;
 };
-document.querySelector('#layout-form').onsubmit=event=>{
-  event.preventDefault();
+document.querySelector('#layout-form').onsubmit=event=>event.preventDefault();
+function saveLayout(){
   if(roomName(document.querySelector('#room-key').value)!==room){document.querySelector('#setup-note').textContent='Join the new room before saving its layout.';return;}
   const [columns,rows]=document.querySelector('#formation').value.split('x').map(Number);
   const next={columns,rows,revision:config.revision+1,writer};
   if(!validConfig(next))return;
   if(peerClock)peerClock.acceptConfig(next);else applyConfig(next);
-  document.querySelector('#setup-note').textContent=peerClock?`Saved ${columns} across × ${rows} down for ${room}. This device and connected peers now use that layout.`:`Saved ${columns} across × ${rows} down on this device. Select the same arrangement on each tablet; clocks align automatically.`;
-};
-document.querySelector('#device-form').onsubmit=event=>{
-  event.preventDefault();
-  if(roomName(document.querySelector('#room-key').value)!==room){document.querySelector('#setup-note').textContent='Join the new room before choosing this device’s position.';return;}
-  const value=document.querySelector('#screen-number').value;
-  if(value==='setup'){document.querySelector('#setup-note').textContent='Choose a numbered screen, welcome display, or preview.';return;}
-  setDevice(value==='preview'?null:Number(value),value==='preview');setup.close();
-};
+  document.querySelector('#setup-note').textContent=peerClock?'Layout updated. Tap your numbered box to start.':'Layout updated. Use the same arrangement on each tablet, then tap your numbered box.';
+}
+function choosePosition(number,full=false){
+  if(roomName(document.querySelector('#room-key').value)!==room){document.querySelector('#setup-note').textContent='Join the new room before choosing a screen.';return;}
+  setDevice(number,full);setup.close();
+}
+document.querySelector('#use-welcome').onclick=()=>choosePosition(0);
+document.querySelector('#use-preview').onclick=()=>choosePosition(null,true);
 function applyConfig(next) {config={...next};save(localStore,`screensync-room:${room}`,config);refreshUI();}
 function connectPeers() {
   const current=++generation;peerClock?.stop();peerStatus=null;

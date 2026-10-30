@@ -1,6 +1,6 @@
 # ScreenSync — The midnight assembly
 
-A silent, generative Halloween installation for ten displays. No build step, accounts, camera, or audio required. PeerJS 1.5.5 is vendored locally under its MIT license.
+A silent, generative Halloween installation for ten displays. Static hosting; no accounts, camera, or audio required. A checked-in compatibility bundle serves older tablets. PeerJS 1.5.5 is vendored locally under its MIT license.
 
 ## Installation without editing URLs
 
@@ -57,8 +57,18 @@ Keep automatic system time enabled on all devices. If needed, `&offset=250` adva
 
 ## Development and deployment
 
-Serve this directory with any static server (for example `python3 -m http.server 8765`). GitHub Pages publishes the root of `main`. Source: HTML, CSS, and Canvas 2D JavaScript. The `window.screenSync` diagnostic exposes the current screen, room, shared layout, corrected timestamp, peer status, and deterministic scene selection for checks.
+Serve this directory with any static server (for example `python3 -m http.server 8765`). GitHub Pages publishes the root of `main`. Source: HTML, CSS, and Canvas 2D JavaScript. Run `npm ci` and `npm run build:legacy` after changing application modules so the checked-in Safari bundle stays current. The `window.screenSync` diagnostic exposes the current screen, room, shared layout, corrected timestamp, peer status, and deterministic scene selection for checks.
 
-Run `npm test` (no dependency installation required) for tile coverage in all formations, shared layout propagation, late joins, clock skew correction, room isolation, reconnect, leader failover, and malformed-message checks.
+Run `npm ci` once, then `npm test` for tile coverage in all formations, shared layout propagation, late joins, clock skew correction, room isolation, reconnect, leader failover, and malformed-message checks.
 
 PeerJS API and signaling documentation: https://peerjs.com/client/api/peer and https://peerjs.com/client/faq
+
+## Safari 9 tablets
+
+The ES5 loader detects older browsers and loads `app.legacy.js` instead of ES modules or PeerJS. The checked-in bundle includes required language/API polyfills; small DOM and Canvas shims adapt the setup dialog, tile selectors, and ellipse drawing. CSS has a non-Grid layout, older-color fallbacks, and touch controls. The old-tablet path renders at up to 30 fps and device pixel ratio 1. Add the page to the iPad Home Screen for a standalone display; iOS Safari does not provide the normal desktop fullscreen API.
+
+Safari 9 has no WebRTC, so it cannot join the direct peer clock or receive live peer room-layout changes. It uses three same-origin XHR HTTP Date samples instead, with the original roughly half-second clock precision plus network uncertainty, checked every two minutes and on returning to the page. Choose the same formation on each old tablet (the five-down ghost tower is the default). The status explicitly says **Tablet mode / server clock**. Different room names on these browsers group saved settings locally; they do not establish a live room connection.
+
+Use `?legacy=1` to force the fallback for QA on a current browser. Tests parse every legacy entry script as ES5 and cover loader selection and XHR timing. Browser QA removes modern APIs to exercise the shims, but that does not replace testing on a physical Safari 9/iOS 9 device. GitHub Pages HTTPS and certificate trust must also work on the actual tablet.
+
+Compatibility reference: Safari first added WebRTC in Safari 11: https://webkit.org/blog/8672/on-the-road-to-webrtc-1-0-including-vp8/

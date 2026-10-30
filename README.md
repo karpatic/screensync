@@ -21,9 +21,9 @@ Layouts are labeled explicitly as columns across and rows down:
 
 Numbering runs left to right, top to bottom. Screen **0 is optional and extra**: a nine-screen wall plus welcome uses ten devices. The numbered diagram previews the arrangement. The connection counter reports wall screens only, excluding welcome and preview observers. The artwork fills the entire selected wall, so its overall proportions vary with the formation.
 
-On the welcome page, numbered buttons immediately make this device that screen. Use **Room & screen** in the wall's controls (move the pointer or press **H**) to change rooms, layout, or device number. A new, unconfigured device is an observer until you select a position; it does not claim screen 0. Each tab remembers its selected room and screen for refreshes using session storage, so several windows on one computer can use different positions. Selecting a number in the UI removes the number from the URL. If session storage is unavailable, choose the number again after refreshing.
+On the welcome page, numbered buttons immediately make this device that screen. Use **Room & screen** in the wall's controls (move the pointer or press **H**) to change rooms, layout, or device number. A new, unconfigured device is an observer until you select a position; it does not claim screen 0. Each tablet remembers its selected setup, layout, and screen in local storage, including after closing and reopening. Session storage takes priority within an existing tab so several windows on one computer can use different positions. Selecting a number in the UI removes the number from the URL. If session storage is unavailable, choose the number again after refreshing.
 
-Use matching screen aspect ratios, landscape orientation, identical browser zoom, and fullscreen (**F** or the Fullscreen button). Each physical display needs its own browser window. Disable device sleep. Close duplicate numbered windows in a room or pick another number.
+Use matching screen aspect ratios, landscape orientation, identical browser zoom, and fullscreen (**F** on desktop, or the Home Screen icon on iPad). Each physical display needs its own browser window. Disable device sleep. Close duplicate numbered windows in a room or pick another number.
 
 Existing `?screen=0` through `?screen=9` links still work. `?n=1` remains an alias. `?preview=1` shows the whole wall. `?room=your-name` selects a room; no URL parameters are required to configure a device.
 
@@ -37,7 +37,7 @@ Room settings use revision numbers and a deterministic writer tie-break to conve
 
 New rooms default to **1 across × 5 down**: screen 1 at the top, screen 5 at the bottom. The ghost and five other cartoons take turns travelling down the tower and back on smooth 36-second journeys, with drifting dust, faint arches, and a soft light trail. Position and character selection come directly from the shared clock, so late joiners see the same parade. Preview preserves the tall wall proportions with letterboxing.
 
-Five- and six-screen lines automatically select the parade; grid formations retain the Halloween scene cycle below. Previously saved room layouts are preserved. Older untouched defaults migrate to the vertical tower when refreshed; refresh every screen to load the new artwork.
+Every formation uses the complete midnight parade and all original Halloween wall scenes. Previously saved room layouts are preserved. Older untouched defaults migrate to the vertical tower when refreshed; refresh every screen to load the new artwork.
 
 ## The haunting
 
@@ -81,6 +81,22 @@ The homepage and Safari page show a tiny version label at bottom right. `version
 
 ## Midnight parade (v1.1)
 
-Five- and six-screen lines now cycle through six original cartoons: the wandering ghost, a witch on her broom, a flock of bats, a dancing skeleton, a balloon-lifted pumpkin, and a black cat on a crescent moon. Each character travels the whole installation and back before gently fading into the next. Five-screen scenes last 36 seconds and six-screen scenes last 43.2 seconds, keeping the travel speed similar. Position and character selection use the shared absolute clock; no interaction or video playback is required. Both vertical stacks and horizontal lines preserve character proportions. Other grid formations retain the original wall scenes.
+Five- and six-screen lines now cycle through six original cartoons: the wandering ghost, a witch on her broom, a flock of bats, a dancing skeleton, a balloon-lifted pumpkin, and a black cat on a crescent moon. Each character travels the whole installation and back before gently fading into the next. Five-screen scenes last 36 seconds and six-screen scenes last 43.2 seconds, keeping the travel speed similar. Position and character selection use the shared absolute clock; no interaction or video playback is required. Both vertical stacks and horizontal lines preserve character proportions. Every grid and line now uses the same complete show.
 
 For six tablets stacked top to bottom, choose **6 screens → 1 across × 6 down**, then tap the correct numbered box (1–6) on each tablet. On Safari 9, select that arrangement on each tablet. The default remains the five-screen stack so existing installations keep working.
+
+## Full-cast show (v1.3)
+
+All formations now use the same nine-scene clock: ghost, eye, witch, bats, pumpkin, portal, skeleton, ghost procession, and moon cat, at 24 seconds per scene. Each layout has a crowd of 7–12 characters (depending on wall size), with staggered, looping two-dimensional paths, gentle turns, and different speeds. The original eye, portal, pumpkin, and ghost scenes appear behind the crowd at their correct proportions. A repeating “Happy Halloween” marquee scrolls behind the characters on every row. Character and scene selection are deterministic across devices; there is no per-device randomness.
+
+The bottom bar now contains identity/timing, **Room & screen**, **Re-sync**, and **Hide controls**. Welcome screen 0 remains in setup. Desktop fullscreen is still available using the **F** key; iPad fullscreen still uses the saved Home Screen icon.
+
+Candy corn, spiral lollipops, and wrapped strawberry candies float in a separate decorative layer at 20% opacity. They are much smaller than the characters and sit behind both the text and the main cast.
+
+## Remembered settings and in-place setup
+
+Setup is a popup over the live animation. Opening it does not navigate or replace the animation, and layout changes update the scene behind it. New unassigned devices show an animated whole-wall preview under that popup. Explicit screen 0 still displays the Halloween welcome message.
+
+The last selected setup/room, screen number, and preview choice persist in local storage and restore on a new launch. Existing tabs keep their own session selection. Named layouts also persist per setup as before. The initial update migrates a selected session's settings into persistent storage.
+
+On Safari 9 the room-key field is hidden: setup only asks for layout and screen position, which are saved on the tablet automatically. Modern browsers still use **Room key** for peer discovery. Safari 9 devices coordinate through the common server clock and need matching layouts selected individually.

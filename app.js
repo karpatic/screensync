@@ -1,14 +1,15 @@
-import {drawCharacter} from './characters.js?v=1.2.0';
-import {PeerClock} from './peer-sync.js?v=1.2.0';
-import {LAYOUTS, validConfig, defaultConfig, tileRect, roomName, isCharacterLine} from './layout.js?v=1.2.0';
-import {ghostPosition, processionState} from './ghost-motion.js?v=1.2.0';
-import {serverDate} from './clock-http.js?v=1.2.0';
+import {drawCandy} from './candy.js?v=1.3.0';
+import {drawCharacter} from './characters.js?v=1.3.0';
+import {PeerClock} from './peer-sync.js?v=1.3.0';
+import {LAYOUTS, validConfig, defaultConfig, tileRect, roomName} from './layout.js?v=1.3.0';
+import {ghostPosition, processionState, showState, ensembleState} from './ghost-motion.js?v=1.3.0';
+import {serverDate} from './clock-http.js?v=1.3.0';
 const params = new URLSearchParams(location.search);
 function stored(storage,key,fallback) {try{return JSON.parse(storage.getItem(key)) ?? fallback;}catch{return fallback;}}
 function save(storage,key,value) {try{storage.setItem(key,JSON.stringify(value));}catch{ /* Storage may be disabled. */ }}
 function safeStorage(name) {try{return window[name];}catch{return {getItem:()=>null,setItem:()=>{}};}}
 const sessionStore=safeStorage('sessionStorage'),localStore=safeStorage('localStorage');
-const savedDevice = stored(sessionStore,'screensync-device',{});
+const savedDevice = stored(sessionStore,'screensync-device',stored(localStore,'screensync-device',{}));
 let room = roomName(params.get('room') || savedDevice.room);
 const raw = params.get('screen') ?? params.get('n');
 let screen = raw!==null && /^[0-9]$/.test(raw) ? Number(raw) : savedDevice.room===room && Number.isInteger(savedDevice.screen) ? savedDevice.screen : null;
@@ -30,6 +31,7 @@ function updateStatus() {
 }
 function rememberDevice() {
   save(sessionStore,'screensync-device',{room,screen,preview});
+  save(localStore,'screensync-device',{room,screen,preview});
   const query=new URLSearchParams(location.search);
   for(const key of ['screen','n','preview','release'])query.delete(key);
   query.set('room',room);history.replaceState(null,'',`?${query}`);
@@ -39,12 +41,17 @@ function setDevice(number, full=false) {
 }
 function refreshUI() {
   const valid=screen===0 || tileRect(screen,config)!==null;
-  welcome=!preview && (screen===0 || !valid);
+  welcome=!preview && screen===0;
   document.body.className=welcome?'welcome':'wall';
-  document.querySelector('#room-title').textContent=room;
-  document.querySelector('#tools a').href=`?room=${encodeURIComponent(room)}&screen=0`;
-  document.querySelector('#layout-summary').textContent=`${config.columns} across × ${config.rows} down · ${count()} wall screens${isCharacterLine(config)?' · The midnight parade':''}`;
-  document.querySelector('#identity').textContent=preview?`FULL WALL / ${config.columns} × ${config.rows}`:screen===0?'WELCOME / SCREEN 0':`SCREEN ${screen} / ${Math.floor((screen-1)/config.columns)+1}:${(screen-1)%config.columns+1}`;
+  document.querySelector('#room-title').textContent=window.screenSyncLegacy?'Tablet setup':room;
+  const localOnly=window.screenSyncLegacy||!window.RTCPeerConnection;
+  document.querySelector('#room-label').textContent=localOnly?'1 / SAVED SETUP NAME':'1 / ROOM KEY';
+  document.querySelector('#join-button').textContent=localOnly?'Use setup':'Join room';
+  document.querySelector('#join-room').style.display=localOnly?'none':'';
+  document.querySelector('#layout-label').textContent=localOnly?'LAYOUT':'2 / WALL SCREENS';
+  document.querySelector('#configure').textContent=localOnly?'Setup & screen':'Room & screen';
+  document.querySelector('#layout-summary').textContent=`${config.columns} across × ${config.rows} down · ${count()} wall screens · The midnight parade`;
+  document.querySelector('#identity').textContent=preview?`FULL WALL / ${config.columns} × ${config.rows}`:screen===0?'WELCOME / SCREEN 0':!valid?'CHOOSE A SCREEN':`SCREEN ${screen} / ${Math.floor((screen-1)/config.columns)+1}:${(screen-1)%config.columns+1}`;
   const nav=document.querySelector('#screens');nav.style.gridTemplateColumns=`repeat(${config.columns},42px)`;if(window.screenSyncLegacy)nav.style.width=`${config.columns*48}px`;nav.replaceChildren();
   for(let n=1;n<=count();n++){const button=document.createElement('button');button.textContent=n;button.setAttribute('aria-label',`Use screen ${n}`);button.onclick=()=>setDevice(n);nav.append(button);}
   fillSetup();
@@ -68,11 +75,10 @@ function fillSetup() {
   document.querySelector('#use-welcome').setAttribute('aria-pressed',String(!preview&&screen===0));
   document.querySelector('#use-preview').setAttribute('aria-pressed',String(preview));
 }
-function openSetup(){if(!setup.open)setup.showModal();}
+function openSetup(){if(!setup.open)setup.showModal();setup.scrollTop=0;}
 document.querySelector('#configure').onclick=()=>{fillSetup();openSetup();};
 document.querySelector('#configure-welcome').onclick=()=>{fillSetup();openSetup();};
 document.querySelector('#preview-wall').onclick=()=>setDevice(null,true);
-document.querySelector('#tools a').onclick=event=>{event.preventDefault();setDevice(0);};
 document.querySelector('#device-count').onchange=event=>{
   const total=Number(event.target.value),options=LAYOUTS.filter(item=>item.columns*item.rows===total);
   const preferred=options.find(item=>config.columns===1?item.columns===1:config.rows===1?item.rows===1:item.columns===config.columns);
@@ -86,7 +92,7 @@ document.querySelector('#join-room').onsubmit=event=>{
 };
 document.querySelector('#layout-form').onsubmit=event=>event.preventDefault();
 function saveLayout(){
-  if(roomName(document.querySelector('#room-key').value)!==room){document.querySelector('#setup-note').textContent='Join the new room before saving its layout.';return;}
+  if(roomName(document.querySelector('#room-key').value)!==room){document.querySelector('#setup-note').textContent=window.screenSyncLegacy?'Use the setup name above before changing its layout.':'Join the new room before changing its layout.';return;}
   const [columns,rows]=document.querySelector('#formation').value.split('x').map(Number);
   const next={columns,rows,revision:config.revision+1,writer};
   if(!validConfig(next))return;
@@ -94,7 +100,7 @@ function saveLayout(){
   document.querySelector('#setup-note').textContent=peerClock?'Layout updated. Tap your numbered box to start.':'Layout updated. Use the same arrangement on each tablet, then tap your numbered box.';
 }
 function choosePosition(number,full=false){
-  if(roomName(document.querySelector('#room-key').value)!==room){document.querySelector('#setup-note').textContent='Join the new room before choosing a screen.';return;}
+  if(roomName(document.querySelector('#room-key').value)!==room){document.querySelector('#setup-note').textContent=window.screenSyncLegacy?'Use the setup name above before choosing a screen.':'Join the new room before choosing a screen.';return;}
   setDevice(number,full);setup.close();
 }
 document.querySelector('#use-welcome').onclick=()=>choosePosition(0);
@@ -109,9 +115,9 @@ function connectPeers() {
       onStatus:value=>{if(current===generation){peerStatus=value;updateStatus();}}});
     peerClock.start().catch(()=>{if(current===generation){peerStatus={text:'P2P unavailable · using UTC'};updateStatus();}});
   }else{peerClock=null;peerStatus={text:window.screenSyncLegacy?'Tablet mode · server clock':'WebRTC unavailable · server clock'};updateStatus();
-    document.querySelector('#setup-note').textContent='Select the same layout on each tablet. Server-clock timing is automatic; peer connections are unavailable in this browser.';}
+    document.querySelector('#setup-note').textContent='Layout and screen number are remembered on this tablet automatically. Choose the same layout on the other tablets, then tap your box.';}
 }
-refreshUI();connectPeers();if(screen===null&&!preview)openSetup();
+refreshUI();if(screen!==null||preview)rememberDevice();connectPeers();if(screen===null&&!preview)openSetup();
 addEventListener('pagehide',event=>{if(!event.persisted)peerClock?.stop();});
 // The server Date header is UTC, at whole-second precision. Midpoint correction
 // bounds typical phase uncertainty to about half a second plus network latency.
@@ -135,7 +141,7 @@ async function syncClock() {
 syncClock(); setInterval(syncClock, 120000);
 document.addEventListener('visibilitychange', () => {if (!document.hidden) syncClock();});
 document.querySelector('#calibrate').onclick = syncClock;
-document.querySelector('#fullscreen').onclick = () => {
+function requestFullscreen() {
   const element=document.documentElement,request=element.requestFullscreen||element.webkitRequestFullscreen;
   if(!request){syncLabel.textContent='On iPad: Share → Add to Home Screen, then open the saved icon for fullscreen.';return;}
   try{const result=request.call(element);if(result&&result.catch)result.catch(()=>{syncLabel.textContent='Use the browser fullscreen command';});}catch{syncLabel.textContent='Use the browser fullscreen command';}
@@ -145,7 +151,7 @@ function showTools() {document.querySelector('#tools').classList.remove('hidden'
 function hideTools(){document.querySelector('#tools').classList.add('hidden');}
 document.querySelector('#hide').onclick=hideTools;
 document.addEventListener('pointermove',showTools);document.addEventListener('pointerdown',showTools);document.addEventListener('touchstart',showTools);
-document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea'))return;const key=(e.key||String.fromCharCode(e.which||e.keyCode||0)).toLowerCase();if(key==='h')showTools();if(key==='f')document.querySelector('#fullscreen').click();});showTools();
+document.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea'))return;const key=(e.key||String.fromCharCode(e.which||e.keyCode||0)).toLowerCase();if(key==='h')showTools();if(key==='f')requestFullscreen();});showTools();
 let W,H;function resize(){const d=Math.min(devicePixelRatio||1,window.screenSyncLegacy?1:1.5);W=canvas.width=Math.round(innerWidth*d);H=canvas.height=Math.round(innerHeight*d);}addEventListener('resize',resize);resize();
 const TAU=Math.PI*2, fract=x=>x-Math.floor(x), random=i=>fract(Math.sin(i*127.1+311.7)*43758.5453);
 function ellipse(x,y,rx,ry,fill){ctx.fillStyle=fill;ctx.beginPath();ctx.ellipse(x,y,rx,Math.max(.001,ry),0,0,TAU);ctx.fill();}
@@ -155,13 +161,12 @@ function eye(t){glow(1500,900,1250,'rgba(97,45,36,0.2667)');const blink=Math.max
 function ghost(x,y,s,t){ctx.save();ctx.translate(x,y);ctx.scale(s,s);ctx.shadowColor='#b3e4d3';ctx.shadowBlur=65;ctx.fillStyle='rgba(197,227,214,0.8667)';ctx.beginPath();ctx.moveTo(-100,80);ctx.lineTo(-100,-20);ctx.bezierCurveTo(-100,-160,100,-160,100,-20);ctx.lineTo(100,80);for(let j=0;j<=8;j++)ctx.lineTo(100-j*25,80+Math.sin(j*1.3+t*2)*20);ctx.closePath();ctx.fill();ctx.shadowBlur=0;ellipse(-35,-25,14,23,'#142330');ellipse(35,-25,14,23,'#142330');ellipse(0,30,13,20+Math.sin(t)*5,'#142330');ctx.restore();}
 function ghosts(t){for(let i=0;i<13;i++){const s=.8+random(i+20)*1.9;const x=fract(random(i+9)+t*(.012+random(i)*.006))*3900-450,y=200+random(i+38)*1400+Math.sin(t*.8+i)*110;ghost(x,y,s,t+i);}}
 function pumpkin(t){ctx.save();ctx.translate(1500,960);ctx.rotate(Math.sin(t*.25)*.035);glow(0,0,1150,'rgba(179,67,23,0.2667)');ctx.fillStyle='#4e5129';ctx.beginPath();ctx.moveTo(-85,-490);ctx.quadraticCurveTo(-140,-790,120,-720);ctx.lineTo(100,-640);ctx.quadraticCurveTo(-30,-680,30,-490);ctx.fill();for(let i=-2;i<=2;i++)ellipse(i*205,0,390-Math.abs(i)*35,540-Math.abs(i)*25,['#a64019','#c4511d','#db6123','#bd4819','#9a3519'][i+2]);const light=ctx.createRadialGradient(0,-50,0,0,-50,800);light.addColorStop(0,'#fff4b5');light.addColorStop(1,'#ff9d2c');ctx.fillStyle=light;ctx.shadowColor='#ffb54f';ctx.shadowBlur=35+Math.sin(t*2)*10;ctx.beginPath();ctx.moveTo(-510,-80);ctx.lineTo(-170,-130);ctx.lineTo(-360,-330);ctx.closePath();ctx.moveTo(510,-80);ctx.lineTo(170,-130);ctx.lineTo(360,-330);ctx.closePath();ctx.moveTo(-70,65);ctx.lineTo(0,-65);ctx.lineTo(70,65);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(-510,130);for(let i=0;i<=12;i++)ctx.lineTo(-510+i*85,190+Math.sin(i*2.3)*50);ctx.quadraticCurveTo(0,660,-510,130);ctx.fill();ctx.restore();}
-function portal(t){ctx.save();ctx.translate(1500,900);glow(0,0,1400,'rgba(105,35,160,0.2667)');for(let i=24;i>=0;i--){const r=90+i*43+Math.sin(t*.9-i*.3)*20;ctx.save();ctx.rotate(t*.05+i*.15);ctx.strokeStyle=`hsla(${265+i*2},75%,${35+i},${.2+i*.02})`;ctx.lineWidth=3+i*.3;ctx.beginPath();for(let j=0;j<=180;j++){const a=j/180*TAU,rr=r+Math.sin(a*7+t*.9+i*.4)*20;const x=Math.cos(a)*rr,y=Math.sin(a)*rr*.72;j?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();ctx.restore();}ellipse(0,0,100,70,'#050409');ctx.restore();for(let i=0;i<24;i++){const x=fract(random(i+75)+t*.027)*3600-300,y=100+random(i+45)*1600+Math.sin(t+i)*90,s=20+random(i)*40;ctx.fillStyle='#050409';ctx.beginPath();ctx.moveTo(x,y+10);ctx.quadraticCurveTo(x-s,y-s*Math.sin(t*5+i),x-s*2,y);ctx.lineTo(x-s*.7,y+20);ctx.lineTo(x,y+12);ctx.lineTo(x+s*.7,y+20);ctx.lineTo(x+s*2,y);ctx.quadraticCurveTo(x+s,y-s*Math.sin(t*5+i),x,y+10);ctx.fill();}}
-// The tower uses screen-proportional coordinates so the ghost stays round,
-// rather than being stretched across the five-screen installation.
-function ghostTower(t){
-  const state=processionState(t,config.columns,config.rows);
-  const palette={ghost:['rgba(128,213,207,.14)','#d8eee4'],witch:['rgba(178,126,221,.16)','#e3c5fa'],bats:['rgba(153,126,221,.16)','#d5c5fa'],skeleton:['rgba(206,223,183,.13)','#e3eaca'],pumpkin:['rgba(244,159,77,.16)','#ffe0a1'],cat:['rgba(227,204,136,.15)','#f4e0aa']};
+function portal(t){ctx.save();ctx.translate(1500,900);glow(0,0,1400,'rgba(105,35,160,0.2667)');for(let i=24;i>=0;i-=window.screenSyncLegacy?2:1){const r=90+i*43+Math.sin(t*.9-i*.3)*20;ctx.save();ctx.rotate(t*.05+i*.15);ctx.strokeStyle=`hsla(${265+i*2},75%,${35+i},${.2+i*.02})`;ctx.lineWidth=3+i*.3;ctx.beginPath();for(let j=0;j<=180;j++){const a=j/180*TAU,rr=r+Math.sin(a*7+t*.9+i*.4)*20;const x=Math.cos(a)*rr,y=Math.sin(a)*rr*.72;j?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();ctx.restore();}ellipse(0,0,100,70,'#050409');ctx.restore();for(let i=0;i<24;i++){const x=fract(random(i+75)+t*.027)*3600-300,y=100+random(i+45)*1600+Math.sin(t+i)*90,s=20+random(i)*40;ctx.fillStyle='#050409';ctx.beginPath();ctx.moveTo(x,y+10);ctx.quadraticCurveTo(x-s,y-s*Math.sin(t*5+i),x-s*2,y);ctx.lineTo(x-s*.7,y+20);ctx.lineTo(x,y+12);ctx.lineTo(x+s*.7,y+20);ctx.lineTo(x+s*2,y);ctx.quadraticCurveTo(x+s,y-s*Math.sin(t*5+i),x,y+10);ctx.fill();}}
+// Every formation shares the same show in screen-proportional world coordinates.
+function drawShow(t){
+  const state=ensembleState(t,config.columns,config.rows);
   ctx.save();ctx.scale(3000/state.width,1800/state.height);
+  ctx.beginPath();ctx.rect(0,0,state.width,state.height);ctx.clip();
   ctx.fillStyle='#050a12';ctx.fillRect(0,0,state.width,state.height);
   for(let row=0;row<config.rows;row++)for(let col=0;col<config.columns;col++){
     const x=col*1000,y=row*600;
@@ -174,12 +179,41 @@ function ghostTower(t){
     const x=random(i+1200)*state.width,y=fract(random(i+1600)-t*(.001+random(i)*.0005))*state.height;
     ellipse(x,y,1+random(i)*2,1+random(i)*2,`rgba(173,220,211,${.08+.18*Math.sin(t*.5+i)**2})`);
   }
-  ctx.globalAlpha=state.alpha;
-  for(let i=window.screenSyncLegacy?8:16;i>0;i--){const past=processionState(t-i*.14,config.columns,config.rows);glow(past.x,past.y,100+i*3,`rgba(123,218,207,${.012*(1-i/18)})`);}
-  glow(state.x,state.y,360,palette[state.kind][0]);
-  ctx.save();ctx.translate(state.x,state.y);if(config.rows===1)ctx.scale(.9,.9);ctx.rotate(Math.sin(t*.7)*.055);
-  drawCharacter(ctx,state.kind,t,{ellipse,ghost});ctx.restore();
-  for(let i=0;i<5;i++){const a=t*.8+i*TAU/5;ellipse(state.x+Math.cos(a)*190,state.y+Math.sin(a)*165,2.5,2.5,palette[state.kind][1]);}
+  // Quiet decoration: smaller and dimmer than both the lettering and the cast.
+  ctx.save();ctx.globalAlpha=.20;
+  for(let i=0;i<config.columns*config.rows*5;i++){
+    const panel=Math.floor(i/5),col=panel%config.columns,row=Math.floor(panel/config.columns);
+    const x=col*1000+90+random(i+2800)*820+Math.sin(t*.13+i)*25;
+    const y=row*600+90+random(i+3200)*420+Math.cos(t*.11+i*.7)*25;
+    ctx.save();ctx.translate(x,y);ctx.rotate(Math.sin(i*2.1)*.5+Math.sin(t*.1+i)*.12);
+    const size=.38+random(i+3600)*.18;ctx.scale(size,size);
+    drawCandy(ctx,['candycorn','lollipop','strawberry'][i%3]);ctx.restore();
+  }
+  ctx.restore();
+  // Original wall scenes join the parade in every layout, without stretching.
+  const feature={eye,pumpkin,portal,ghosts}[state.scene.name];
+  if(feature){
+    ctx.save();ctx.globalAlpha=state.scene.alpha*.7;
+    ctx.translate(state.width/2,state.height/2);
+    const fit=Math.min(state.width/3000,state.height/1800)*.95;
+    ctx.scale(fit,fit);ctx.translate(-1500,-900);feature(t);ctx.restore();
+  }
+  // This lettering is deliberately behind every member of the cast.
+  ctx.save();ctx.font='bold 150px Georgia,serif';ctx.textBaseline='middle';
+  const spacing=1850;
+  for(let row=0;row<config.rows;row++){
+    const shift=((t*85+row*170)%spacing+spacing)%spacing;
+    ctx.fillStyle=row%2?'rgba(180,153,225,.16)':'rgba(240,166,92,.16)';
+    for(let x=-shift-spacing;x<state.width+spacing;x+=spacing)ctx.fillText('Happy Halloween',x,row*600+300+Math.sin(t*.2+row)*20);
+  }
+  ctx.restore();
+  ctx.globalAlpha=state.scene.alpha;
+  const colors={ghost:'rgba(128,213,207,.10)',witch:'rgba(178,126,221,.10)',bats:'rgba(153,126,221,.10)',skeleton:'rgba(206,223,183,.09)',pumpkin:'rgba(244,159,77,.10)',cat:'rgba(227,204,136,.10)'};
+  for(const actor of state.actors){
+    glow(actor.x,actor.y,200,colors[actor.kind]);
+    ctx.save();ctx.translate(actor.x,actor.y);ctx.rotate(actor.rotation);ctx.scale(actor.scale,actor.scale);
+    drawCharacter(ctx,actor.kind,t,{ellipse,ghost});ctx.restore();
+  }
   ctx.restore();
 }
 const scenes=[eye,ghosts,pumpkin,portal];
@@ -188,16 +222,16 @@ function render(){
   if(window.screenSyncLegacy){const stamp=performance.now();if(stamp-lastFrame<32){requestAnimationFrame(render);return;}lastFrame=stamp;}
   const t=now()/1000,phase=((t%120)+120)%120,index=Math.floor(phase/30),local=phase%30;
   ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,W,H);
-  const full=welcome||preview,rect=full?{x:0,y:0,width:3000,height:1800}:tileRect(screen,config);
+  const assigned=tileRect(screen,config),full=welcome||preview||!assigned,rect=full?{x:0,y:0,width:3000,height:1800}:assigned;
   if(rect){
-    const tower=!welcome&&isCharacterLine(config);
+    const wall=!welcome;
     let drawW=W,drawH=H;
-    if(preview&&tower){const aspect=config.columns*1000/(config.rows*600);drawW=Math.min(W,H*aspect);drawH=drawW/aspect;ctx.translate((W-drawW)/2,(H-drawH)/2);}
+    if(full&&wall){const aspect=config.columns*1000/(config.rows*600);drawW=Math.min(W,H*aspect);drawH=drawW/aspect;ctx.translate((W-drawW)/2,(H-drawH)/2);}
     ctx.scale(drawW/rect.width,drawH/rect.height);ctx.translate(-rect.x,-rect.y);
-    if(tower)ghostTower(t);
+    if(wall)drawShow(t);
     else{background(t);ctx.globalAlpha=Math.min(1,local/2,(30-local)/2);scenes[index](t);ctx.globalAlpha=1;}
-    if(preview){ctx.strokeStyle='rgba(255,200,144,0.3333)';ctx.lineWidth=2;ctx.font='20px monospace';for(let n=1;n<=count();n++){const tile=tileRect(n,config);ctx.strokeRect(tile.x,tile.y,tile.width,tile.height);ctx.fillStyle='#ffdfb6';if(tower){ctx.save();ctx.translate(tile.x+60,tile.y+40);ctx.scale(3000/(config.columns*1000),1800/(config.rows*600));ctx.font='40px monospace';ctx.fillText(String(n),0,0);ctx.restore();}else ctx.fillText(String(n),tile.x+24,tile.y+38);}}
+    if(preview||(!assigned&&!welcome)){ctx.strokeStyle='rgba(255,200,144,0.3333)';ctx.lineWidth=2;ctx.font='20px monospace';for(let n=1;n<=count();n++){const tile=tileRect(n,config);ctx.strokeRect(tile.x,tile.y,tile.width,tile.height);ctx.fillStyle='#ffdfb6';if(wall){ctx.save();ctx.translate(tile.x+60,tile.y+40);ctx.scale(3000/(config.columns*1000),1800/(config.rows*600));ctx.font='40px monospace';ctx.fillText(String(n),0,0);ctx.restore();}else ctx.fillText(String(n),tile.x+24,tile.y+38);}}
   }
   requestAnimationFrame(render);
 }render();
-window.screenSync={get screen(){return screen},get preview(){return preview},get room(){return room},get layout(){return {...config}},get legacy(){return !!window.screenSyncLegacy},get experience(){return isCharacterLine(config)?'midnight-parade':'midnight-assembly'},ghostPosition,processionState,now,get peers(){return peerStatus},get offset(){return offset},get status(){return clockQuality},sceneAt:ms=>Math.floor((((ms/1000)%120)+120)%120/30)};
+window.screenSync={get screen(){return screen},get preview(){return preview},get room(){return room},get layout(){return {...config}},get legacy(){return !!window.screenSyncLegacy},get experience(){return 'midnight-parade'},ghostPosition,processionState,showState,ensembleState,now,get peers(){return peerStatus},get offset(){return offset},get status(){return clockQuality},sceneAt:ms=>showState(ms/1000).name};

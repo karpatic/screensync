@@ -25,7 +25,7 @@
     dialog.setAttribute('role','dialog');dialog.setAttribute('aria-modal','true');
     dialog.showModal = function () {
       this.setAttribute('open','');d.documentElement.classList.add('setup-open');
-      var focus = this.querySelector('input');if(focus)focus.focus();
+      var focus = this.querySelector('button[aria-label="Close setup"]');if(focus)focus.focus();
     };
     dialog.close = function () {this.removeAttribute('open');d.documentElement.classList.remove('setup-open');};
     // Unknown dialog elements have no native open property in Safari 9.

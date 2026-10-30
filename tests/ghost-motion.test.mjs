@@ -37,3 +37,25 @@ test('all characters traverse five/six screen lines on a deterministic continuou
     assert.equal(start.kind,end.kind);assert.ok(Math.abs(start.x-end.x)<.001&&Math.abs(start.y-end.y)<.001);
   }
 });
+
+test('all layouts share every scene and a smoothly moving multi-character cast',async()=>{
+  const {LAYOUTS}=await import('../layout.js');
+  const {ensembleState,SHOW_SCENES,SHOW_SCENE_SECONDS}=await import('../ghost-motion.js');
+  for(const layout of LAYOUTS){
+    const names=new Set();
+    for(let i=0;i<SHOW_SCENES.length;i++){
+      const t=i*SHOW_SCENE_SECONDS+8,s=ensembleState(t,layout.columns,layout.rows),next=ensembleState(t+.01,layout.columns,layout.rows);
+      names.add(s.scene.name);assert.ok(s.actors.length>=7&&s.actors.length<=12);
+      assert.ok(new Set(s.actors.map(a=>a.kind)).size>=3);
+      s.actors.forEach((a,j)=>{
+        assert.ok(a.x>=0&&a.x<=s.width&&a.y>=0&&a.y<=s.height);
+        assert.ok(Math.abs(a.x-next.actors[j].x)<10&&Math.abs(a.y-next.actors[j].y)<10);
+      });
+      assert.deepEqual(s,ensembleState(t,layout.columns,layout.rows));
+    }
+    assert.deepEqual([...names],SHOW_SCENES);
+    const p=ensembleState(17,layout.columns,layout.rows).actors;
+    assert.ok(new Set(p.map(a=>Math.round(a.x))).size>3);
+    assert.ok(new Set(p.map(a=>Math.round(a.y))).size>3);
+  }
+});

@@ -1,7 +1,8 @@
-import {PeerClock} from './peer-sync.js?v=1.0.0';
-import {LAYOUTS, validConfig, defaultConfig, tileRect, roomName} from './layout.js?v=1.0.0';
-import {ghostPosition} from './ghost-motion.js?v=1.0.0';
-import {serverDate} from './clock-http.js?v=1.0.0';
+import {drawCharacter} from './characters.js?v=1.1.0';
+import {PeerClock} from './peer-sync.js?v=1.1.0';
+import {LAYOUTS, validConfig, defaultConfig, tileRect, roomName, isCharacterLine} from './layout.js?v=1.1.0';
+import {ghostPosition, processionState} from './ghost-motion.js?v=1.1.0';
+import {serverDate} from './clock-http.js?v=1.1.0';
 const params = new URLSearchParams(location.search);
 function stored(storage,key,fallback) {try{return JSON.parse(storage.getItem(key)) ?? fallback;}catch{return fallback;}}
 function save(storage,key,value) {try{storage.setItem(key,JSON.stringify(value));}catch{ /* Storage may be disabled. */ }}
@@ -42,7 +43,7 @@ function refreshUI() {
   document.body.className=welcome?'welcome':'wall';
   document.querySelector('#room-title').textContent=room;
   document.querySelector('#tools a').href=`?room=${encodeURIComponent(room)}&screen=0`;
-  document.querySelector('#layout-summary').textContent=`${config.columns} across × ${config.rows} down · ${count()} wall screens${config.columns===1&&config.rows===5?' · The wandering ghost':''}`;
+  document.querySelector('#layout-summary').textContent=`${config.columns} across × ${config.rows} down · ${count()} wall screens${isCharacterLine(config)?' · The midnight parade':''}`;
   document.querySelector('#identity').textContent=preview?`FULL WALL / ${config.columns} × ${config.rows}`:screen===0?'WELCOME / SCREEN 0':`SCREEN ${screen} / ${Math.floor((screen-1)/config.columns)+1}:${(screen-1)%config.columns+1}`;
   const nav=document.querySelector('#screens');nav.style.gridTemplateColumns=`repeat(${config.columns},42px)`;if(window.screenSyncLegacy)nav.style.width=`${config.columns*48}px`;nav.replaceChildren();
   for(let n=1;n<=count();n++){const button=document.createElement('button');button.textContent=n;button.setAttribute('aria-label',`Use screen ${n}`);button.onclick=()=>setDevice(n);nav.append(button);}
@@ -158,29 +159,27 @@ function portal(t){ctx.save();ctx.translate(1500,900);glow(0,0,1400,'rgba(105,35
 // The tower uses screen-proportional coordinates so the ghost stays round,
 // rather than being stretched across the five-screen installation.
 function ghostTower(t){
-  ctx.save();ctx.scale(3,.6);
-  ctx.fillStyle='#050a12';ctx.fillRect(0,0,1000,3000);
-  for(let row=0;row<5;row++){
-    glow(500,300+row*600,620,'rgba(16,43,51,0.2667)');
-    ctx.strokeStyle='rgba(139,199,198,0.0863)';ctx.lineWidth=1.5;
-    ctx.beginPath();ctx.moveTo(125,600*row+520);ctx.lineTo(125,600*row+240);
-    ctx.bezierCurveTo(125,600*row-20,875,600*row-20,875,600*row+240);
-    ctx.lineTo(875,600*row+520);ctx.stroke();
+  const state=processionState(t,config.columns,config.rows);
+  const palette={ghost:['rgba(128,213,207,.14)','#d8eee4'],witch:['rgba(178,126,221,.16)','#e3c5fa'],bats:['rgba(153,126,221,.16)','#d5c5fa'],skeleton:['rgba(206,223,183,.13)','#e3eaca'],pumpkin:['rgba(244,159,77,.16)','#ffe0a1'],cat:['rgba(227,204,136,.15)','#f4e0aa']};
+  ctx.save();ctx.scale(3000/state.width,1800/state.height);
+  ctx.fillStyle='#050a12';ctx.fillRect(0,0,state.width,state.height);
+  for(let row=0;row<config.rows;row++)for(let col=0;col<config.columns;col++){
+    const x=col*1000,y=row*600;
+    glow(x+500,y+300,620,'rgba(16,43,51,.2667)');
+    ctx.strokeStyle='rgba(139,199,198,.0863)';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(x+125,y+520);ctx.lineTo(x+125,y+240);
+    ctx.bezierCurveTo(x+125,y-20,x+875,y-20,x+875,y+240);ctx.lineTo(x+875,y+520);ctx.stroke();
   }
   for(let i=0;i<(window.screenSyncLegacy?80:190);i++){
-    const x=random(i+1200)*1000,y=fract(random(i+1600)-t*(.001+random(i)*.0005))*3000;
+    const x=random(i+1200)*state.width,y=fract(random(i+1600)-t*(.001+random(i)*.0005))*state.height;
     ellipse(x,y,1+random(i)*2,1+random(i)*2,`rgba(173,220,211,${.08+.18*Math.sin(t*.5+i)**2})`);
   }
-  for(let i=window.screenSyncLegacy?8:16;i>0;i--){const past=ghostPosition(t-i*.14);glow(past.x,past.y,100+i*3,`rgba(123,218,207,${.012*(1-i/18)})`);}
-  const position=ghostPosition(t);
-  glow(position.x,position.y,360,'rgba(128,213,207,0.1412)');
-  ctx.save();ctx.translate(position.x,position.y);ctx.rotate(Math.sin(t*.7)*.055);
-  // A soft living silhouette, with a little face and fluttering scalloped hem.
-  ghost(0,0,1.6,t);ctx.restore();
-  for(let i=0;i<5;i++){
-    const a=t*.8+i*TAU/5;
-    ellipse(position.x+Math.cos(a)*190,position.y+Math.sin(a)*165,2.5,2.5,'rgba(216,238,228,0.6667)');
-  }
+  ctx.globalAlpha=state.alpha;
+  for(let i=window.screenSyncLegacy?8:16;i>0;i--){const past=processionState(t-i*.14,config.columns,config.rows);glow(past.x,past.y,100+i*3,`rgba(123,218,207,${.012*(1-i/18)})`);}
+  glow(state.x,state.y,360,palette[state.kind][0]);
+  ctx.save();ctx.translate(state.x,state.y);if(config.rows===1)ctx.scale(.9,.9);ctx.rotate(Math.sin(t*.7)*.055);
+  drawCharacter(ctx,state.kind,t,{ellipse,ghost});ctx.restore();
+  for(let i=0;i<5;i++){const a=t*.8+i*TAU/5;ellipse(state.x+Math.cos(a)*190,state.y+Math.sin(a)*165,2.5,2.5,palette[state.kind][1]);}
   ctx.restore();
 }
 const scenes=[eye,ghosts,pumpkin,portal];
@@ -191,14 +190,14 @@ function render(){
   ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,W,H);
   const full=welcome||preview,rect=full?{x:0,y:0,width:3000,height:1800}:tileRect(screen,config);
   if(rect){
-    const tower=!welcome&&config.columns===1&&config.rows===5;
+    const tower=!welcome&&isCharacterLine(config);
     let drawW=W,drawH=H;
-    if(preview&&tower){drawW=Math.min(W,H/3);drawH=drawW*3;ctx.translate((W-drawW)/2,(H-drawH)/2);}
+    if(preview&&tower){const aspect=config.columns*1000/(config.rows*600);drawW=Math.min(W,H*aspect);drawH=drawW/aspect;ctx.translate((W-drawW)/2,(H-drawH)/2);}
     ctx.scale(drawW/rect.width,drawH/rect.height);ctx.translate(-rect.x,-rect.y);
     if(tower)ghostTower(t);
     else{background(t);ctx.globalAlpha=Math.min(1,local/2,(30-local)/2);scenes[index](t);ctx.globalAlpha=1;}
-    if(preview){ctx.strokeStyle='rgba(255,200,144,0.3333)';ctx.lineWidth=2;ctx.font='20px monospace';for(let n=1;n<=count();n++){const tile=tileRect(n,config);ctx.strokeRect(tile.x,tile.y,tile.width,tile.height);ctx.fillStyle='#ffdfb6';if(tower){ctx.save();ctx.translate(tile.x+60,tile.y+40);ctx.scale(3,.6);ctx.font='40px monospace';ctx.fillText(String(n),0,0);ctx.restore();}else ctx.fillText(String(n),tile.x+24,tile.y+38);}}
+    if(preview){ctx.strokeStyle='rgba(255,200,144,0.3333)';ctx.lineWidth=2;ctx.font='20px monospace';for(let n=1;n<=count();n++){const tile=tileRect(n,config);ctx.strokeRect(tile.x,tile.y,tile.width,tile.height);ctx.fillStyle='#ffdfb6';if(tower){ctx.save();ctx.translate(tile.x+60,tile.y+40);ctx.scale(3000/(config.columns*1000),1800/(config.rows*600));ctx.font='40px monospace';ctx.fillText(String(n),0,0);ctx.restore();}else ctx.fillText(String(n),tile.x+24,tile.y+38);}}
   }
   requestAnimationFrame(render);
 }render();
-window.screenSync={get screen(){return screen},get preview(){return preview},get room(){return room},get layout(){return {...config}},get legacy(){return !!window.screenSyncLegacy},get experience(){return config.columns===1&&config.rows===5?'wandering-ghost':'midnight-assembly'},ghostPosition,now,get peers(){return peerStatus},get offset(){return offset},get status(){return clockQuality},sceneAt:ms=>Math.floor((((ms/1000)%120)+120)%120/30)};
+window.screenSync={get screen(){return screen},get preview(){return preview},get room(){return room},get layout(){return {...config}},get legacy(){return !!window.screenSyncLegacy},get experience(){return isCharacterLine(config)?'midnight-parade':'midnight-assembly'},ghostPosition,processionState,now,get peers(){return peerStatus},get offset(){return offset},get status(){return clockQuality},sceneAt:ms=>Math.floor((((ms/1000)%120)+120)%120/30)};

@@ -15,7 +15,7 @@ Layouts are labeled explicitly as columns across and rows down:
 | Wall screens | Arrangements |
 | --- | --- |
 | 9 | 3 across × 3 down |
-| 6 | 3 across × 2 down; 2 across × 3 down |
+| 6 | 3 across × 2 down; 2 across × 3 down; 1 across × 6 down; 6 across × 1 down |
 | 4 | 2 across × 2 down |
 | 5 | 5 across × 1 down; 1 across × 5 down |
 
@@ -33,11 +33,11 @@ Save a layout once, and active peers automatically adopt it. A late-joining scre
 
 Room settings use revision numbers and a deterministic writer tie-break to converge after concurrent edits or disconnected groups rejoin. They survive clock-leader departure. If a smaller layout excludes a device's old screen number, that device opens setup and asks for a valid position. Separate room keys keep separate layouts and timing groups. To switch rooms, enter its key and select **Join room**, then choose this device's number.
 
-## The wandering ghost (default)
+## The midnight parade (default)
 
-New rooms default to **1 across × 5 down**: screen 1 at the top, screen 5 at the bottom. A single glowing mint ghost travels down the full tower and back up on a smooth 36-second loop. It crosses screen boundaries as one continuous figure, with drifting dust, faint arches, and a soft light trail. The position comes directly from the shared peer clock, so late joiners see the same ghost. Preview preserves the tall wall proportions with letterboxing.
+New rooms default to **1 across × 5 down**: screen 1 at the top, screen 5 at the bottom. The ghost and five other cartoons take turns travelling down the tower and back on smooth 36-second journeys, with drifting dust, faint arches, and a soft light trail. Position and character selection come directly from the shared clock, so late joiners see the same parade. Preview preserves the tall wall proportions with letterboxing.
 
-The vertical formation automatically selects this dedicated experience; the other formations retain the Halloween scene cycle below. Previously saved room layouts are preserved. Older untouched defaults migrate to the vertical tower when refreshed; refresh every screen to load the new artwork.
+Five- and six-screen lines automatically select the parade; grid formations retain the Halloween scene cycle below. Previously saved room layouts are preserved. Older untouched defaults migrate to the vertical tower when refreshed; refresh every screen to load the new artwork.
 
 ## The haunting
 
@@ -78,3 +78,9 @@ Compatibility reference: Safari first added WebRTC in Safari 11: https://webkit.
 Open **https://karpatic.github.io/screensync/safari9.html** for the tablet version. It always selects compatibility mode and embeds its CSS, DOM shims, and ES5 application in one HTML file. It does not load the homepage's script or stylesheet URLs, so stale copies of those assets cannot affect this page. Server-clock requests still use the network.
 
 The homepage and Safari page show a tiny version label at bottom right. `version.json` records that version and a source build fingerprint. To make a release, bump `package.json`'s version (for example `npm version patch --no-git-tag-version`), run `npm run build`, then `npm test`. Commit the generated HTML, bundle, and manifest. The build refreshes module/cache keys, stamps the homepage, and regenerates the self-contained Safari page. Use `safari9.html?v=VERSION-BUILD` when sharing a fresh release; a new URL avoids a cached HTML response as well. Static GitHub Pages can still cache each individual URL.
+
+## Midnight parade (v1.1)
+
+Five- and six-screen lines now cycle through six original cartoons: the wandering ghost, a witch on her broom, a flock of bats, a dancing skeleton, a balloon-lifted pumpkin, and a black cat on a crescent moon. Each character travels the whole installation and back before gently fading into the next. Five-screen scenes last 36 seconds and six-screen scenes last 43.2 seconds, keeping the travel speed similar. Position and character selection use the shared absolute clock; no interaction or video playback is required. Both vertical stacks and horizontal lines preserve character proportions. Other grid formations retain the original wall scenes.
+
+For six tablets stacked top to bottom, choose **6 screens → 1 across × 6 down**, save the layout, then assign screens 1–6. On Safari 9, select that arrangement on each tablet. The default remains the five-screen stack so existing installations keep working.

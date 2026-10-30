@@ -1,4 +1,4 @@
-import {validConfig, defaultConfig, compareConfig} from './layout.js?v=1.0.0';
+import {validConfig, defaultConfig, compareConfig} from './layout.js?v=1.1.0';
 // Small timing mesh. PeerJS only brokers discovery; RTCDataChannel carries clocks.
 export class PeerClock {
   constructor({Peer, room, slot, baseNow, logicalNow, onOffset, onStatus, config = defaultConfig(), onConfig = () => {},

@@ -12,7 +12,7 @@ execFileSync(process.execPath,['scripts/build-legacy.mjs'],{stdio:'inherit'});
 let index=await readFile('index.html','utf8');
 index=index.replace(/<!-- build-info -->[\s\S]*?<!-- \/build-info -->\n?/g,'');
 const normalized=index.replace(/\?v=[^"']+/g,'');
-const files=['app.js','app.legacy.js','peer-sync.js','layout.js','ghost-motion.js','clock-http.js','compat.js','boot.js','style.css','scripts/build-release.mjs','scripts/build-legacy.mjs'];
+const files=['app.js','app.legacy.js','peer-sync.js','layout.js','ghost-motion.js','characters.js','clock-http.js','compat.js','boot.js','style.css','scripts/build-release.mjs','scripts/build-legacy.mjs'];
 const hash=createHash('sha256').update(version).update(normalized);
 for(const file of files)hash.update(await readFile(file));
 const id=hash.digest('hex').slice(0,10),assetVersion=`${version}-${id}`;
